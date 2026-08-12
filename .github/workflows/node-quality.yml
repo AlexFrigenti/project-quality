@@ -1,0 +1,102 @@
+name: Reusable Node.js quality
+
+on:
+  workflow_call:
+    inputs:
+      node-version:
+        description: Node.js version used by the project
+        required: false
+        type: string
+        default: "22"
+      install-command:
+        description: Reproducible dependency installation command
+        required: true
+        type: string
+      lint-command:
+        description: Lint or formatting command
+        required: true
+        type: string
+      typecheck-command:
+        description: Optional type-check command
+        required: false
+        type: string
+        default: ""
+      build-command:
+        description: Build command
+        required: true
+        type: string
+      test-command:
+        description: Unit or deterministic test command
+        required: true
+        type: string
+      coverage-command:
+        description: Optional coverage command
+        required: false
+        type: string
+        default: ""
+      e2e-install-command:
+        description: Optional browser or E2E dependency installation command
+        required: false
+        type: string
+        default: ""
+      e2e-command:
+        description: Optional E2E command
+        required: false
+        type: string
+        default: ""
+      smoke-command:
+        description: Optional artifact or startup smoke command
+        required: false
+        type: string
+        default: ""
+
+jobs:
+  quality:
+    name: Quality gates
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ inputs.node-version }}
+          cache: npm
+          cache-dependency-path: package-lock.json
+
+      - name: Install dependencies
+        run: ${{ inputs.install-command }}
+
+      - name: Lint or format
+        run: ${{ inputs.lint-command }}
+
+      - name: TypeScript or type checks
+        if: ${{ inputs.typecheck-command != '' }}
+        run: ${{ inputs.typecheck-command }}
+
+      - name: Build
+        run: ${{ inputs.build-command }}
+
+      - name: Unit or deterministic tests
+        run: ${{ inputs.test-command }}
+
+      - name: Coverage
+        if: ${{ inputs.coverage-command != '' }}
+        run: ${{ inputs.coverage-command }}
+
+      - name: Install E2E dependencies
+        if: ${{ inputs.e2e-install-command != '' }}
+        run: ${{ inputs.e2e-install-command }}
+
+      - name: E2E tests
+        if: ${{ inputs.e2e-command != '' }}
+        run: ${{ inputs.e2e-command }}
+
+      - name: Smoke test
+        if: ${{ inputs.smoke-command != '' }}
+        run: ${{ inputs.smoke-command }}
