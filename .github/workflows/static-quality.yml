@@ -1,0 +1,43 @@
+name: Reusable static quality
+
+on:
+  workflow_call:
+    inputs:
+      node-version:
+        description: Node.js version used by the validation scripts
+        required: false
+        type: string
+        default: "22"
+      validation-command:
+        description: Deterministic validation command for the static project
+        required: true
+        type: string
+      smoke-command:
+        description: Optional startup or artifact smoke command
+        required: false
+        type: string
+        default: ""
+
+jobs:
+  quality:
+    name: Static quality gates
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ inputs.node-version }}
+
+      - name: Deterministic static validation
+        run: ${{ inputs.validation-command }}
+
+      - name: Smoke test
+        if: ${{ inputs.smoke-command != '' }}
+        run: ${{ inputs.smoke-command }}

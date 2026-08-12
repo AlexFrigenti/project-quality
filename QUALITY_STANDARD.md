@@ -32,7 +32,7 @@ La PR no se considera lista si los checks obligatorios están fallando o no exis
 
 Cada proyecto debe tener, como mínimo, los controles que correspondan a su perfil:
 
-- formato o lint;
+- formato o lint cuando exista una herramienta aplicable;
 - comprobación de tipos cuando el lenguaje lo permita;
 - build o empaquetado;
 - pruebas automatizadas;
@@ -40,7 +40,7 @@ Cada proyecto debe tener, como mínimo, los controles que correspondan a su perf
 - E2E, visuales o integración cuando existan UI, red, almacenamiento o flujos críticos;
 - cobertura cuando haya una infraestructura de tests suficientemente madura.
 
-Un comando ausente no debe convertirse en un paso verde falso. Debe implantarse, sustituirse por una validación equivalente o quedar registrado como deuda técnica.
+Un comando ausente no debe convertirse en un paso verde falso. Debe implantarse, sustituirse por una validación equivalente o quedar registrado como deuda técnica. En un proyecto estático sin gestor de paquetes puede utilizarse un validador determinista de contratos, pero debe comprobar comportamiento o artefactos reales.
 
 ### 4. Tests deterministas
 
@@ -113,8 +113,8 @@ Adecuado para Núcleo.
 
 Controles habituales:
 
-- instalación reproducible;
-- lint o comprobación equivalente;
+- instalación reproducible cuando el proyecto tenga dependencias;
+- lint o comprobación equivalente cuando exista una herramienta aplicable;
 - build;
 - pruebas de lógica y estado;
 - smoke de arranque;
@@ -122,6 +122,19 @@ Controles habituales:
 - pruebas visuales o revisión manual controlada para cambios de composición.
 
 No necesita inventar una API, una base de datos o una cobertura de backend que el proyecto no tiene.
+
+### Perfil de preview estática
+
+Adecuado para repositorios experimentales como `Nucleo-preview`, que pueden no tener `package.json` ni un gestor de dependencias.
+
+Controles habituales:
+
+- validador determinista de referencias, recursos, versiones e invariantes relevantes;
+- smoke local o del artefacto cuando exista un servidor o paquete verificable;
+- comprobación de que los recursos publicados corresponden al estado revisado;
+- revisión visual o manual controlada para cambios de composición, animación y experiencia móvil.
+
+Puede consumir `static-quality.yml`. No debe inventar instalación, lint, cobertura o tests de Node que el repositorio no necesita.
 
 ### Perfil Worker o aplicación con datos
 
