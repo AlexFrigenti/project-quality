@@ -29,3 +29,31 @@ Cada proyecto debe adaptar sus comandos, pruebas, cobertura y validaciones a su 
 7. Revisa y fusiona únicamente después de que las validaciones pasen.
 
 Los workflows compartidos deben consumirse mediante una versión estable o un commit fijado, no siguiendo cambios accidentales de una rama de desarrollo.
+
+## Ejemplo de consumo Node.js
+
+En el repositorio consumidor, crea un workflow como este y sustituye `<COMMIT_SHA>` por el SHA estable de esta workflow:
+
+```yaml
+name: Quality
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  quality:
+    uses: AlexFrigenti/project-quality/.github/workflows/node-quality.yml@<COMMIT_SHA>
+    with:
+      install-command: npm ci
+      lint-command: npm run lint
+      typecheck-command: npm run typecheck
+      build-command: npm run build
+      test-command: npm test
+      coverage-command: npm run test:coverage
+      e2e-command: npm run test:e2e
+      smoke-command: npm run test:smoke
+```
+
+Los comandos opcionales pueden omitirse cuando no apliquen. La instalación reproducible presupone que el proyecto mantiene su lockfile.
