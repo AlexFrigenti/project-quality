@@ -2,7 +2,7 @@
 
 Estándar compartido de calidad, CI y flujo de trabajo para los proyectos de AlexFrigenti.
 
-Este repositorio no contiene código de una aplicación concreta. Contiene reglas, documentación y workflows reutilizables para que proyectos como `gestor-autonomo`, Nexo y Núcleo mantengan una calidad técnica coherente sin forzarles la misma arquitectura.
+Este repositorio no contiene código de una aplicación concreta. Contiene reglas, documentación y workflows reutilizables para que proyectos como `gestor-autonomo`, Nexo, Núcleo y `Nucleo-preview` mantengan una calidad técnica coherente sin forzarles la misma arquitectura.
 
 ## Qué contiene
 
@@ -11,6 +11,7 @@ Este repositorio no contiene código de una aplicación concreta. Contiene regla
 - [AGENTS.md](AGENTS.md): instrucciones para agentes de IA que trabajen en los repositorios.
 - [.github/pull_request_template.md](.github/pull_request_template.md): checklist común de revisión.
 - [.github/workflows/node-quality.yml](.github/workflows/node-quality.yml): workflow reutilizable para proyectos Node.js.
+- [.github/workflows/static-quality.yml](.github/workflows/static-quality.yml): workflow reutilizable para proyectos estáticos o previews sin dependencias de aplicación.
 
 ## Principio central
 
@@ -56,4 +57,26 @@ jobs:
       smoke-command: npm run test:smoke
 ```
 
-Los comandos opcionales pueden omitirse cuando no apliquen. La instalación reproducible presupone que el proyecto mantiene su lockfile.
+En el workflow Node, los comandos opcionales pueden omitirse cuando no apliquen. La instalación reproducible presupone que el proyecto mantiene su lockfile.
+
+## Ejemplo de consumo de un proyecto estático
+
+Los proyectos sin `package.json`, como una preview web experimental, no deben forzar `npm ci`, lint o cobertura artificial. Deben aportar una validación determinista propia y, si procede, un smoke del artefacto:
+
+```yaml
+name: Quality
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  quality:
+    uses: AlexFrigenti/project-quality/.github/workflows/static-quality.yml@<COMMIT_SHA>
+    with:
+      validation-command: node scripts/validate-preview.mjs
+      smoke-command: node scripts/smoke-preview.mjs
+```
+
+La validación no debe limitarse a devolver un código cero: debe comprobar contratos reales del proyecto, como referencias de recursos, versiones, artefactos o invariantes de estado.
