@@ -130,7 +130,7 @@ Añade al perfil web:
 - migraciones reproducibles;
 - tests de aislamiento por propietario;
 - pruebas de contratos de API;
-- dobles de D1, R2 u otros bindings;
+- dobles de bindings o servicios gestionados;
 - integración aislada sobre una base temporal cuando aporte valor;
 - controles de compatibilidad del artefacto desplegable.
 
