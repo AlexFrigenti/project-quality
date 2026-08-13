@@ -74,7 +74,11 @@ function boundedText(value, maxLength) {
   return String(value).slice(0, maxLength);
 }
 
-function sanitizeMetricValue(value, path) {
+function sanitizeMetricValue(value, path, context = { count: 0, depth: 0 }) {
+  context.count += 1;
+  if (context.count > 100) throw new Error("El informe contiene demasiados valores métricos.");
+  if (context.depth > 6) throw new Error("La métrica está anidada más allá del límite permitido.");
+
   if (typeof value === "number") {
     if (!Number.isFinite(value) || value < 0) throw new Error("Métrica inválida en " + path);
     return value;
@@ -90,7 +94,11 @@ function sanitizeMetricValue(value, path) {
   const sanitized = {};
   for (const [key, child] of entries) {
     if (!/^[a-zA-Z][a-zA-Z0-9_-]*$/.test(key)) throw new Error("Nombre de métrica inválido en " + path);
-    sanitized[key] = sanitizeMetricValue(child, path + "." + key);
+    sanitized[key] = sanitizeMetricValue(child, path + "." + key, {
+      count: context.count,
+      depth: context.depth + 1
+    });
+    context.count = context.count;
   }
   return sanitized;
 }
@@ -104,6 +112,13 @@ function sanitizeEvidenceList(items, exposeLinks) {
     if (exposeLinks) evidence.url = item.url;
     return evidence;
   });
+}
+
+function sanitizeMetrics(metrics) {
+  const context = { count: 0, depth: 0 };
+  return Object.fromEntries(
+    Object.entries(metrics).map(([key, value]) => [key, sanitizeMetricValue(value, key, context)])
+  );
 }
 
 export function sanitizeQualityMetrics(report) {
@@ -144,9 +159,7 @@ export function sanitizeQualityMetrics(report) {
       details: boundedText(gate.details, 400),
       evidence: sanitizeEvidenceList(gate.evidence, true)
     })),
-    metrics: Object.fromEntries(
-      Object.entries(report.metrics).map(([key, value]) => [key, sanitizeMetricValue(value, key)])
-    ),
+    metrics: sanitizeMetrics(report.metrics),
     evidence: sanitizeEvidenceList(report.evidence, true)
   };
 }
@@ -181,9 +194,7 @@ export function buildQualitySummary(report, { exposeLinks = false } = {}) {
       details: boundedText(gate.details, 400),
       evidence: sanitizeEvidenceList(gate.evidence, exposeLinks)
     })),
-    metrics: Object.fromEntries(
-      Object.entries(report.metrics).map(([key, value]) => [key, sanitizeMetricValue(value, key)])
-    )
+    metrics: sanitizeMetrics(report.metrics)
   };
 
   if (exposeLinks) {
@@ -251,6 +262,7 @@ export async function collectQualityEvidence({
 
     try {
       const parsed = await readArtifactJson(artifact, repository);
+      if (parsed?.project?.repository !== repository) continue;
       const summary = buildQualitySummary(parsed, { exposeLinks });
 
       if (summary.commit.sha !== currentCommitSha) continue;
