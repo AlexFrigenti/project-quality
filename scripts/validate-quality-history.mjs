@@ -17,6 +17,12 @@ function object(value, path) {
   if (value === null || typeof value !== "object" || Array.isArray(value)) fail(path + " debe ser un objeto");
 }
 
+function keys(value, allowed, path) {
+  for (const key of Object.keys(value)) {
+    if (!allowed.has(key)) fail(path + "." + key + " no está permitido");
+  }
+}
+
 function text(value, path, maxLength = 1000) {
   if (typeof value !== "string" || value.trim() === "") fail(path + " debe ser texto no vacío");
   if (value.length > maxLength) fail(path + " supera el límite de longitud");
@@ -62,6 +68,7 @@ function metric(value, path, context = { count: 0, depth: 0 }) {
 
 function validateGate(gate, path) {
   object(gate, path);
+  keys(gate, new Set(["id", "label", "applicability", "status", "details"]), path);
   text(gate.id, path + ".id", 80);
   if (!/^[a-z0-9][a-z0-9-]*$/.test(gate.id)) fail(path + ".id no es válido");
   text(gate.label, path + ".label", 160);
@@ -78,6 +85,7 @@ function validateGate(gate, path) {
 
 function validateProcess(process, path) {
   object(process, path);
+  keys(process, new Set(["overall", "mainProtection", "workflow", "checks"]), path);
   for (const key of ["overall", "mainProtection", "workflow"]) {
     if (!PROCESS_STATUSES.has(process[key])) fail(path + "." + key + " no es válido");
   }
@@ -85,6 +93,7 @@ function validateProcess(process, path) {
   process.checks.forEach((check, index) => {
     const checkPath = path + ".checks[" + index + "]";
     object(check, checkPath);
+    keys(check, new Set(["id", "status"]), checkPath);
     text(check.id, checkPath + ".id", 80);
     if (!/^[a-z0-9][a-z0-9-]*$/.test(check.id)) fail(checkPath + ".id no es válido");
     if (!PROCESS_STATUSES.has(check.status)) fail(checkPath + ".status no es válido");
@@ -93,6 +102,7 @@ function validateProcess(process, path) {
 
 function validateQuality(quality, path) {
   object(quality, path);
+  keys(quality, new Set(["status", "currentHeadSha", "commitSha", "validatedAt", "conclusion", "message", "gates", "metrics"]), path);
   if (!QUALITY_STATUSES.has(quality.status)) fail(path + ".status no es válido");
   if (!Array.isArray(quality.gates)) fail(path + ".gates debe ser un array");
   quality.gates.forEach((gate, index) => validateGate(gate, path + ".gates[" + index + "]"));
@@ -119,12 +129,14 @@ function validateQuality(quality, path) {
 
 export function validateQualityHistory(snapshot) {
   object(snapshot, "snapshot");
+  keys(snapshot, new Set(["schemaVersion", "id", "generatedAt", "dashboardCommitSha", "standard", "repositories"]), "snapshot");
   noNull(snapshot);
   if (snapshot.schemaVersion !== 1) fail("schemaVersion debe ser 1");
   sha(snapshot.id, "id", 64);
   date(snapshot.generatedAt, "generatedAt");
   sha(snapshot.dashboardCommitSha, "dashboardCommitSha");
   object(snapshot.standard, "standard");
+  keys(snapshot.standard, new Set(["release", "sha"]), "standard");
   text(snapshot.standard.release, "standard.release", 40);
   sha(snapshot.standard.sha, "standard.sha");
   if (!Array.isArray(snapshot.repositories) || snapshot.repositories.length === 0) fail("repositories debe contener proyectos");
@@ -133,6 +145,7 @@ export function validateQualityHistory(snapshot) {
   snapshot.repositories.forEach((repository, index) => {
     const path = "repositories[" + index + "]";
     object(repository, path);
+    keys(repository, new Set(["id", "repository", "kind", "visibility", "notApplicableAreas", "process", "quality"]), path);
     text(repository.id, path + ".id", 80);
     if (!/^[a-z0-9][a-z0-9-]*$/.test(repository.id)) fail(path + ".id no es válido");
     if (ids.has(repository.id)) fail("Proyecto duplicado: " + repository.id);
