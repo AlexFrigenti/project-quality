@@ -77,6 +77,14 @@ El workflow conserva los gates existentes y solo añade la generación, validaci
 
 El informe no debe incluir secretos ni datos privados. El generador solo incorpora métricas numéricas y referencias a la ejecución del workflow. Las páginas públicas no reciben tokens ni logs completos.
 
-## Alcance de esta primera integración
+## Integración con el dashboard
 
-Esta primera integración define y publica el contrato común. Todavía no modifica los workflows consumidores ni el collector del dashboard. Esos cambios se harán en PRs independientes después de publicar una versión estable del estándar.
+Los workflows consumidores de `v1.1.0` ya publican el artifact `quality-metrics`. El collector de `project-quality`:
+
+1. localiza ejecuciones completadas sobre la rama estable;
+2. exige que el SHA de la ejecución coincida con el HEAD actual;
+3. descarga y valida `quality-metrics.json`;
+4. conserva únicamente campos sanitizados;
+5. omite URLs de ejecuciones y evidencias cuando el repositorio es privado.
+
+Si no encuentra un informe válido para el SHA actual, el dashboard muestra `Evidencia pendiente para el commit actual`.
