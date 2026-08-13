@@ -84,6 +84,7 @@ jobs:
 ```
 
 La validación no debe limitarse a devolver un código cero: debe comprobar contratos reales del proyecto, como referencias de recursos, versiones, artefactos o invariantes de estado.
+
 ## Histórico persistente
 
 El workflow del dashboard guarda snapshots sanitizados de los estados validados en releases mensuales de GitHub. No se crean commits automáticos sobre `main`, no se duplica una reejecución idéntica y todavía no se calculan puntuaciones ni gráficos artificiales. Consulta [QUALITY_HISTORY.md](QUALITY_HISTORY.md) para el contrato y las reglas de deduplicación.
