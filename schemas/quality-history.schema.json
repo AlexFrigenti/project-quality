@@ -89,7 +89,7 @@
         "validatedAt": { "type": "string", "format": "date-time" },
         "conclusion": { "enum": ["passed", "failed", "unknown"] },
         "message": { "type": "string", "minLength": 1, "maxLength": 200 },
-        "gates": { "type": "array", "items": { "$ref": "#/$defs/gate" } },
+        "gates": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/gate" } },
         "metrics": {
           "type": "object",
           "additionalProperties": { "$ref": "#/$defs/metricValue" }
@@ -98,11 +98,23 @@
       "allOf": [
         {
           "if": { "properties": { "status": { "const": "current" } } },
-          "then": { "required": ["commitSha", "validatedAt", "conclusion"] }
+          "then": {
+            "required": ["commitSha", "validatedAt", "conclusion"],
+            "not": { "anyOf": [{ "required": ["message"] }, { "required": ["currentHeadSha"] }] }
+          }
         },
         {
           "if": { "properties": { "status": { "enum": ["pending", "unavailable"] } } },
-          "then": { "required": ["message"] }
+          "then": {
+            "required": ["message"],
+            "not": {
+              "anyOf": [
+                { "required": ["commitSha"] },
+                { "required": ["validatedAt"] },
+                { "required": ["conclusion"] }
+              ]
+            }
+          }
         }
       ]
     },
