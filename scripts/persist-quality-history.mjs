@@ -172,6 +172,7 @@ export function buildQualityHistorySnapshot(data, { now = new Date(), dashboardC
   };
   snapshot.id = snapshotId(snapshot);
   if (TOKEN_PATTERN.test(JSON.stringify(snapshot))) throw new Error("El snapshot contiene un patrón que parece un token.");
+  validateQualityHistory(snapshot);
   return snapshot;
 }
 
@@ -225,8 +226,8 @@ async function getOrCreateRelease({ repository, period, token, targetCommit }) {
   return created.data;
 }
 
-async function listAssets(release, token) {
-  const response = await githubRequest(`/repos/${process.env.GITHUB_REPOSITORY}/releases/${release.id}/assets?per_page=100`, { token });
+async function listAssets(release, repository, token) {
+  const response = await githubRequest(`/repos/${repository}/releases/${release.id}/assets?per_page=100`, { token });
   if (!response.ok) throw new Error("No se pudieron consultar los assets históricos.");
   return response.data?.filter((asset) => asset && typeof asset.name === "string") || [];
 }
@@ -238,7 +239,7 @@ async function uploadAsset(release, name, content, token) {
     method: "POST",
     headers: {
       ...authHeaders(token),
-      "Content-Type": "application/json",
+      "Content-Type": "application/octet-stream",
       "Content-Length": String(Buffer.byteLength(content))
     },
     body: content
@@ -253,7 +254,7 @@ export async function persistSnapshot(snapshot, { repository, token, targetCommi
   const period = snapshot.generatedAt.slice(0, 7);
   const release = await getOrCreateRelease({ repository: repo, period, token: secret, targetCommit: targetCommit || "main" });
   const assetName = "quality-snapshot-" + snapshot.id + ".json";
-  const assets = await listAssets(release, secret);
+  const assets = await listAssets(release, repo, secret);
   if (assets.some((asset) => asset.name === assetName)) return { created: false, period, assetName };
   const content = JSON.stringify(snapshot, null, 2) + "\n";
   await uploadAsset(release, assetName, content, secret);
