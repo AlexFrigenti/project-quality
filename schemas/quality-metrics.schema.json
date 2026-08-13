@@ -258,8 +258,7 @@
           "type": "object",
           "minProperties": 1,
           "additionalProperties": {
-            "type": "number",
-            "minimum": 0
+            "$ref": "#/$defs/metricValue"
           }
         }
       ]
