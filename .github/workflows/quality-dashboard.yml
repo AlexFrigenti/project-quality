@@ -15,10 +15,12 @@ on:
       - "scripts/generate-quality-metrics.mjs"
       - "scripts/collect-quality-evidence.mjs"
       - "scripts/test-quality-evidence.mjs"
-      - "schemas/quality-history.schema.json"
       - "scripts/validate-quality-history.mjs"
       - "scripts/persist-quality-history.mjs"
       - "scripts/test-quality-history.mjs"
+      - "scripts/validate-quality-history-index.mjs"
+      - "scripts/collect-quality-history.mjs"
+      - "scripts/test-quality-history-index.mjs"
       - "scripts/validate-quality-metrics.mjs"
       - "scripts/test-quality-metrics.mjs"
       - ".github/workflows/node-quality.yml"
@@ -38,10 +40,12 @@ on:
       - "scripts/generate-quality-metrics.mjs"
       - "scripts/collect-quality-evidence.mjs"
       - "scripts/test-quality-evidence.mjs"
-      - "schemas/quality-history.schema.json"
       - "scripts/validate-quality-history.mjs"
       - "scripts/persist-quality-history.mjs"
       - "scripts/test-quality-history.mjs"
+      - "scripts/validate-quality-history-index.mjs"
+      - "scripts/collect-quality-history.mjs"
+      - "scripts/test-quality-history-index.mjs"
       - "scripts/validate-quality-metrics.mjs"
       - "scripts/test-quality-metrics.mjs"
       - ".github/workflows/node-quality.yml"
@@ -122,6 +126,9 @@ jobs:
       - name: Validate quality history contract
         run: node scripts/test-quality-history.mjs
 
+      - name: Validate history index tooling
+        run: node scripts/test-quality-history-index.mjs
+
       - name: Download audit reports
         uses: actions/download-artifact@v4
         with:
@@ -136,6 +143,16 @@ jobs:
           STANDARD_RELEASE: v1.1.0
           STANDARD_SHA: e763e13404e52e9e9c2e87d51efaa3c3492dd27c
         run: node scripts/assemble-dashboard.mjs
+
+      - name: Generate history index
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          HISTORY_REPOSITORY: ${{ github.repository }}
+          HISTORY_SITE_DIR: site
+        run: node scripts/collect-quality-history.mjs
+
+      - name: Validate history index
+        run: node scripts/validate-quality-history-index.mjs site/history.json
 
       - name: Validate dashboard data
         run: node scripts/validate-dashboard.mjs site/data.json
@@ -154,7 +171,6 @@ jobs:
           name: quality-dashboard-site
           path: site
           if-no-files-found: error
-
 
   history:
     name: Persist quality history
