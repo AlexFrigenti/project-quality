@@ -50,10 +50,12 @@ El dashboard no tiene backend, base de datos ni proveedor externo. Solo contiene
 
 El workflow conserva snapshots sanitizados en releases mensuales de `project-quality`. Cada release usa el formato `quality-history-YYYY-MM` y cada snapshot se publica como un asset inmutable `quality-snapshot-<sha256>.json`.
 
+Antes de publicar, el job de ensamblado combina el snapshot del estado actual con los assets históricos y genera `history.json`. La vista [Evolución histórica](dashboard/history.html) permite navegar por proyecto y enlaza desde cada tarjeta del mapa principal.
+
 El identificador se calcula a partir del estado normalizado de los cuatro proyectos, sus commits validados, gates, métricas y controles de proceso. Una reejecución idéntica no crea otro snapshot. Si no existe ninguna evidencia actual validada, no se inventa una entrada histórica.
 
-El contrato y las reglas de privacidad están documentados en [QUALITY_HISTORY.md](QUALITY_HISTORY.md). Los gráficos de evolución se añadirán en una fase posterior y solo usarán métricas cuantificables reales.
+Los gráficos de evolución se añadirán en una fase posterior y solo usarán métricas cuantificables reales.
 
 ## Estado actual y evolución
 
-La versión actual combina la auditoría de proceso con la evidencia real del commit actual. No calcula una nota global ni porcentajes artificiales. El histórico persistente ya conserva los estados validados fuera de la retención de artifacts y prepara la siguiente fase: lectura de snapshots y gráficos de evolución.
+La versión actual combina la auditoría de proceso con la evidencia real del commit actual. No calcula una nota global ni porcentajes artificiales. El histórico persistente ya conserva los estados validados fuera de la retención de artifacts y ahora se expone mediante una vista temporal verificable.
