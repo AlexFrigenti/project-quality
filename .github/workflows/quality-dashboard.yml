@@ -1,0 +1,153 @@
+name: Quality dashboard
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - ".github/workflows/quality-dashboard.yml"
+      - "DASHBOARD.md"
+      - "dashboard/**"
+      - "scripts/audit-repository.mjs"
+      - "scripts/assemble-dashboard.mjs"
+      - "scripts/validate-dashboard.mjs"
+  push:
+    branches:
+      - main
+    paths:
+      - ".github/workflows/quality-dashboard.yml"
+      - "DASHBOARD.md"
+      - "dashboard/**"
+      - "scripts/audit-repository.mjs"
+      - "scripts/assemble-dashboard.mjs"
+      - "scripts/validate-dashboard.mjs"
+  schedule:
+    - cron: "17 6 * * 1"
+
+concurrency:
+  group: quality-dashboard
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  audit:
+    name: Audit ${{ matrix.id }}
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - id: gestor-autonomo
+            repository: AlexFrigenti/gestor-autonomo
+            profile: gestor-autonomo
+            visibility: private
+          - id: nexo
+            repository: AlexFrigenti/Nexo
+            profile: nexo
+            visibility: private
+          - id: nucleo
+            repository: AlexFrigenti/Nucleo
+            profile: nucleo
+            visibility: public
+          - id: nucleo-preview
+            repository: AlexFrigenti/Nucleo-preview
+            profile: nucleo-preview
+            visibility: public
+    steps:
+      - name: Checkout dashboard source
+        uses: actions/checkout@v4
+
+      - name: Audit repository
+        env:
+          AUDIT_TOKEN: ${{ github.event_name == 'pull_request' && github.token || secrets.QUALITY_AUDIT_TOKEN || github.token }}
+          AUDIT_REPOSITORY: ${{ matrix.repository }}
+          AUDIT_PROFILE: ${{ matrix.profile }}
+          AUDIT_VISIBILITY: ${{ matrix.visibility }}
+          QUALITY_STANDARD_SHA: 28f01d394b9b212a302a49d010cd5e928052e8e8
+          OUTPUT_FILE: report-${{ matrix.id }}.json
+        run: node scripts/audit-repository.mjs
+
+      - name: Upload audit report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: audit-${{ matrix.id }}
+          path: report-${{ matrix.id }}.json
+          if-no-files-found: error
+
+  assemble:
+    name: Assemble dashboard
+    if: always()
+    needs: audit
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout dashboard source
+        uses: actions/checkout@v4
+
+      - name: Download audit reports
+        uses: actions/download-artifact@v4
+        with:
+          pattern: audit-*
+          path: audit-reports
+          merge-multiple: true
+
+      - name: Assemble static dashboard
+        env:
+          REPORTS_DIR: audit-reports
+          OUTPUT_DIR: site
+          STANDARD_RELEASE: v1.0.0
+          STANDARD_SHA: 28f01d394b9b212a302a49d010cd5e928052e8e8
+        run: node scripts/assemble-dashboard.mjs
+
+      - name: Validate dashboard data
+        run: node scripts/validate-dashboard.mjs site/data.json
+
+      - name: Upload dashboard preview
+        uses: actions/upload-artifact@v4
+        with:
+          name: quality-dashboard-preview
+          path: site
+          if-no-files-found: error
+
+      - name: Upload Pages source artifact
+        if: github.event_name != 'pull_request'
+        uses: actions/upload-artifact@v4
+        with:
+          name: quality-dashboard-site
+          path: site
+          if-no-files-found: error
+
+  deploy:
+    name: Deploy dashboard to Pages
+    if: github.event_name != 'pull_request' && needs.assemble.result == 'success'
+    needs: assemble
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      actions: read
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Download Pages source
+        uses: actions/download-artifact@v4
+        with:
+          name: quality-dashboard-site
+          path: site
+
+      - name: Configure Pages
+        uses: actions/configure-pages@v5
+
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+
+      - name: Deploy to Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
