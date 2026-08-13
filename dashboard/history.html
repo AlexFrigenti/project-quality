@@ -46,6 +46,28 @@
       .history-meta { color: var(--muted); font-size: 12px; text-align: right; }
       .history-meta strong { display: block; color: var(--text); font-size: 14px; }
       .overview { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-bottom: 32px; }
+      .charts-panel { margin-bottom: 32px; padding: 20px; border: 1px solid var(--line); border-radius: 16px; background: rgba(11, 27, 47, .72); box-shadow: var(--shadow); }
+      .charts-heading { display: flex; align-items: end; justify-content: space-between; gap: 18px; margin-bottom: 16px; }
+      .charts-heading h2 { margin-bottom: 4px; font-size: 20px; letter-spacing: -.025em; }
+      .charts-heading p { margin-bottom: 0; color: var(--muted); font-size: 13px; }
+      .chart-grid { display: grid; gap: 14px; }
+      .chart-card { padding: 16px; border: 1px solid var(--line); border-radius: 13px; background: linear-gradient(145deg, rgba(20, 43, 70, .72), rgba(10, 24, 42, .55)); }
+      .chart-head { display: flex; align-items: start; justify-content: space-between; gap: 14px; }
+      .chart-title { margin-bottom: 3px; font-size: 15px; }
+      .chart-meta { color: var(--muted); font-size: 11px; }
+      .chart-wrap { margin: 8px -5px 0; overflow-x: auto; }
+      .chart { display: block; width: 100%; min-width: 480px; height: auto; }
+      .chart-grid-line, .chart-axis { stroke: var(--line); stroke-width: 1; }
+      .chart-line { fill: none; stroke: var(--cyan); stroke-width: 3; stroke-linecap: round; stroke-linejoin: round; }
+      .chart-point { fill: var(--panel-strong); stroke: var(--cyan); stroke-width: 2; }
+      .chart-axis-label { fill: var(--muted); font-size: 10px; }
+      .chart-values { width: 100%; margin-top: 10px; border-collapse: collapse; color: var(--text); font-size: 11px; }
+      .chart-values th, .chart-values td { padding: 6px 8px; border-top: 1px solid var(--line); text-align: left; }
+      .chart-values th { color: var(--muted); font-weight: 700; }
+      .chart-values th:last-child, .chart-values td:last-child { text-align: right; }
+      .chart-details { margin-top: 7px; color: var(--muted); font-size: 11px; }
+      .chart-details summary { cursor: pointer; color: var(--cyan); }
+      .chart-empty { padding: 16px; border: 1px dashed var(--line); border-radius: 10px; color: var(--muted); font-size: 13px; }
       .stat { padding: 16px; border: 1px solid var(--line); border-radius: 13px; background: linear-gradient(145deg, rgba(20, 43, 70, .9), rgba(10, 24, 42, .75)); }
       .stat-label { display: block; color: var(--muted); font-size: 11px; font-weight: 800; letter-spacing: .05em; text-transform: uppercase; }
       .stat-value { display: block; margin-top: 7px; font-size: 22px; font-weight: 800; }
@@ -110,6 +132,18 @@
       </section>
 
       <section class="overview" id="overview" aria-label="Resumen del histórico"></section>
+
+      <section class="charts-panel" aria-labelledby="metrics-heading">
+        <div class="charts-heading">
+          <div>
+            <p class="eyebrow">Métricas reales</p>
+            <h2 id="metrics-heading">Evolución cuantificable</h2>
+            <p>Solo se dibujan series numéricas con al menos dos snapshots validados. Los gates siguen siendo estados.</p>
+          </div>
+          <div class="history-meta" id="charts-meta"></div>
+        </div>
+        <div id="metric-charts" class="chart-grid" aria-live="polite"></div>
+      </section>
       <section id="timeline" class="timeline" aria-live="polite"></section>
 
       <footer>
@@ -191,6 +225,103 @@
         return String(value) + (/coverage/i.test(path) ? "%" : "");
       }
 
+      function metricPathLabel(path) {
+        return path.split(" · ").map((part) => part.replace(/[-_]/g, " ")).join(" · ");
+      }
+
+      function formatShortDate(value) {
+        return new Intl.DateTimeFormat("es-ES", { day: "2-digit", month: "short" }).format(new Date(value));
+      }
+
+      function collectMetricSeries(records) {
+        const series = new Map();
+        records.slice().reverse().forEach((record) => {
+          const quality = record.repository.quality;
+          if (quality.status !== "current") return;
+          flattenMetrics(quality.metrics || {}, "").forEach(([path, value]) => {
+            if (!path || !Number.isFinite(value) || value < 0) return;
+            if (!series.has(path)) series.set(path, []);
+            series.get(path).push({
+              generatedAt: record.snapshot.generatedAt,
+              commitSha: quality.commitSha || "",
+              value
+            });
+          });
+        });
+        return [...series.entries()]
+          .map(([path, points]) => ({ path, points }))
+          .filter((item) => item.points.length >= 2);
+      }
+
+      function buildMetricChartSvg(series) {
+        const width = 720;
+        const height = 260;
+        const left = 58;
+        const right = 18;
+        const top = 24;
+        const bottom = 44;
+        const plotWidth = width - left - right;
+        const plotHeight = height - top - bottom;
+        const values = series.points.map((point) => point.value);
+        const maximum = Math.max(...values, 0);
+        const domainMaximum = maximum > 0 ? maximum * 1.1 : 1;
+        const x = (index) => left + (series.points.length === 1 ? plotWidth / 2 : index * plotWidth / (series.points.length - 1));
+        const y = (value) => top + plotHeight - value * plotHeight / domainMaximum;
+        const coordinates = series.points.map((point, index) => ({ ...point, x: x(index), y: y(point.value) }));
+        const line = coordinates.map((point, index) => (index === 0 ? "M" : "L") + point.x.toFixed(2) + " " + point.y.toFixed(2)).join(" ");
+        const ticks = [0, .5, 1].map((ratio) => {
+          const value = domainMaximum * ratio;
+          const yPosition = y(value);
+          return '<line class="chart-grid-line" x1="' + left + '" y1="' + yPosition.toFixed(2) + '" x2="' + (width - right) + '" y2="' + yPosition.toFixed(2) + '"></line>' +
+            '<text class="chart-axis-label" x="' + (left - 8) + '" y="' + (yPosition + 4).toFixed(2) + '" text-anchor="end">' + escapeHtml(formatMetric(series.path, value)) + '</text>';
+        }).join("");
+        const labelIndexes = [...new Set(series.points.length <= 4
+          ? series.points.map((_, index) => index)
+          : [0, Math.floor((series.points.length - 1) / 2), series.points.length - 1])];
+        const xLabels = labelIndexes.map((index) => {
+          const point = coordinates[index];
+          return '<text class="chart-axis-label" x="' + point.x.toFixed(2) + '" y="' + (height - 14) + '" text-anchor="middle">' + escapeHtml(formatShortDate(point.generatedAt)) + '</text>';
+        }).join("");
+        const points = coordinates.map((point) => {
+          const title = formatShortDate(point.generatedAt) + " · " + formatMetric(series.path, point.value) + " · " + shortSha(point.commitSha);
+          return '<circle class="chart-point" cx="' + point.x.toFixed(2) + '" cy="' + point.y.toFixed(2) + '" r="4"><title>' + escapeHtml(title) + '</title></circle>';
+        }).join("");
+        const label = metricPathLabel(series.path);
+        return '<svg class="chart" viewBox="0 0 ' + width + ' ' + height + '" role="img" aria-label="Evolución de ' + escapeHtml(label) + '">' +
+          '<title>Evolución de ' + escapeHtml(label) + '</title>' +
+          ticks +
+          '<line class="chart-axis" x1="' + left + '" y1="' + top + '" x2="' + left + '" y2="' + (height - bottom) + '"></line>' +
+          '<line class="chart-axis" x1="' + left + '" y1="' + (height - bottom) + '" x2="' + (width - right) + '" y2="' + (height - bottom) + '"></line>' +
+          '<path class="chart-line" d="' + line + '"></path>' +
+          points +
+          xLabels +
+          '</svg>';
+      }
+
+      function renderMetricChart(series) {
+        const label = metricPathLabel(series.path);
+        const latest = series.points[series.points.length - 1];
+        const rows = series.points.map((point) => '<tr><td>' + escapeHtml(formatShortDate(point.generatedAt)) + '</td><td><code>' + escapeHtml(shortSha(point.commitSha)) + '</code></td><td>' + escapeHtml(formatMetric(series.path, point.value)) + '</td></tr>').join("");
+        return '<article class="chart-card">' +
+          '<div class="chart-head"><div><h3 class="chart-title">' + escapeHtml(label) + '</h3><div class="chart-meta">' + escapeHtml(series.points.length + " observaciones · último valor " + formatMetric(series.path, latest.value)) + '</div></div></div>' +
+          '<div class="chart-wrap">' + buildMetricChartSvg(series) + '</div>' +
+          '<details class="chart-details"><summary>Ver datos exactos</summary><table class="chart-values"><thead><tr><th>Fecha</th><th>Commit</th><th>Valor</th></tr></thead><tbody>' + rows + '</tbody></table></details>' +
+          '</article>';
+      }
+
+      function renderMetricCharts(records) {
+        const container = document.getElementById("metric-charts");
+        const meta = document.getElementById("charts-meta");
+        const series = collectMetricSeries(records);
+        if (!series.length) {
+          meta.textContent = "Sin series suficientes";
+          container.innerHTML = '<div class="chart-empty">Los gráficos aparecerán cuando una métrica numérica tenga al menos dos observaciones históricas validadas. Los valores con una sola observación siguen disponibles dentro de cada snapshot.</div>';
+          return;
+        }
+        meta.textContent = series.length + (series.length === 1 ? " serie" : " series");
+        container.innerHTML = series.map(renderMetricChart).join("");
+      }
+
       function renderSelect(snapshots, selected) {
         const ids = new Set();
         snapshots.forEach((snapshot) => snapshot.repositories.forEach((repository) => ids.add(repository.id)));
@@ -247,6 +378,7 @@
         }).filter(Boolean);
 
         renderOverview(records);
+        renderMetricCharts(records);
         document.getElementById("history-meta").innerHTML = '<strong>' + escapeHtml(projectLabels[selected] || selected) + '</strong>' + escapeHtml(index.snapshots.length + " snapshots sanitizados");
         document.getElementById("timeline").innerHTML = records.length
           ? records.map(renderSnapshot).join("")
@@ -267,6 +399,7 @@
             document.getElementById("history-meta").textContent = "Sin snapshots disponibles";
             document.getElementById("timeline").innerHTML = '<div class="empty">El histórico aparecerá cuando se valide un commit de main.</div>';
             document.getElementById("overview").innerHTML = "";
+            renderMetricCharts([]);
             return;
           }
 
