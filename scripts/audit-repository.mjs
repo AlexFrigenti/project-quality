@@ -298,7 +298,7 @@ const qualityEvidence = await collectQualityEvidence({
 });
 report.qualityEvidence = qualityEvidence;
 
-if (qualityEvidence.status === "current" && qualityEvidence.report) {
+if (qualityEvidence.status === "current" && qualityEvidence.summary) {
   const conclusion = qualityEvidence.summary.conclusion;
   const status = conclusion === "passed" ? "pass" : conclusion === "failed" ? "fail" : "unknown";
   const run = qualityEvidence.summary.run;
