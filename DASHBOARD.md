@@ -22,7 +22,7 @@ Los proyectos no comparten arquitectura, dependencias ni una lista artificial de
 
 ## Acceso al repositorio privado
 
-`gestor-autonomo` es privado. Para auditarlo completamente hay que crear en `project-quality` un secreto de Actions llamado `QUALITY_AUDIT_TOKEN` con un token fine-grained de solo lectura y alcance limitado a los repositorios necesarios. Sin ese secreto, el dashboard muestra el repositorio como `Revisar` y no expone enlaces ni contenido privado.
+`gestor-autonomo` y `Nexo` son privados. Para auditarlos completamente hay que crear en `project-quality` un secreto de Actions llamado `QUALITY_AUDIT_TOKEN` con un token fine-grained de solo lectura y alcance limitado a los repositorios necesarios. Sin ese secreto, el dashboard muestra esos repositorios como `Revisar` y no expone enlaces ni contenido privado.
 
 En ejecuciones de Pull Request no se usa ese secreto: el workflow usa el token efímero de GitHub para no entregar credenciales privadas a código de una rama no confiable.
 
