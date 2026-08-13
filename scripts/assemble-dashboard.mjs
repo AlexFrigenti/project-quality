@@ -44,5 +44,16 @@ const data = {
 };
 
 await writeFile(join(outputDir, "data.json"), `${JSON.stringify(data, null, 2)}\n`);
-await copyFile("dashboard/index.html", join(outputDir, "index.html"));
+
+const dashboardPages = ["index.html", "history.html"];
+for (const page of dashboardPages) {
+  const sourcePath = join("dashboard", page);
+  const outputPath = join(outputDir, page);
+  await copyFile(sourcePath, outputPath);
+  const content = await readFile(outputPath, "utf8");
+  if (content.length === 0) {
+    throw new Error(`La página del dashboard está vacía: ${page}`);
+  }
+}
+
 await writeFile(join(outputDir, ".nojekyll"), "\n");
