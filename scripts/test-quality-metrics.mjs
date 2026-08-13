@@ -1,5 +1,7 @@
 import assert from "node:assert/strict";
-import { readFile } from "node:fs/promises";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { join } from "node:path";
+import { tmpdir } from "node:os";
 import { buildQualityMetrics } from "./generate-quality-metrics.mjs";
 import { validateQualityMetrics } from "./validate-quality-metrics.mjs";
 
@@ -36,6 +38,31 @@ assert.equal(report.schemaVersion, 1);
 assert.equal(report.conclusion, "passed");
 assert.equal(report.gates.find((gate) => gate.id === "metrics").status, "not-applicable");
 assert.deepEqual(report.metrics, {});
+
+const metricsDirectory = await mkdtemp(join(tmpdir(), "quality-metrics-"));
+const metricsFile = join(metricsDirectory, "metrics.json");
+await writeFile(metricsFile, JSON.stringify({
+  metrics: {
+    tests: { total: 12, passed: 12 },
+    coverage: { lines: 86.4, branches: 78.1 }
+  }
+}));
+const metricsReport = await buildQualityMetrics({
+  env: {
+    ...baseEnv,
+    QUALITY_GATE_APPLICABILITY_METRICS: "required",
+    QUALITY_GATE_STATUS_METRICS: "success",
+    QUALITY_METRICS_FILE: metricsFile,
+    QUALITY_METRICS_FILE_REQUIRED: "true"
+  },
+  now: new Date("2026-08-13T10:00:00.000Z")
+});
+validateQualityMetrics(metricsReport);
+assert.deepEqual(metricsReport.metrics, {
+  tests: { total: 12, passed: 12 },
+  coverage: { lines: 86.4, branches: 78.1 }
+});
+await rm(metricsDirectory, { recursive: true, force: true });
 
 const failedReport = await buildQualityMetrics({
   env: {
