@@ -94,11 +94,9 @@ function sanitizeMetricValue(value, path, context = { count: 0, depth: 0 }) {
   const sanitized = {};
   for (const [key, child] of entries) {
     if (!/^[a-zA-Z][a-zA-Z0-9_-]*$/.test(key)) throw new Error("Nombre de métrica inválido en " + path);
-    sanitized[key] = sanitizeMetricValue(child, path + "." + key, {
-      count: context.count,
-      depth: context.depth + 1
-    });
-    context.count = context.count;
+    context.depth += 1;
+    sanitized[key] = sanitizeMetricValue(child, path + "." + key, context);
+    context.depth -= 1;
   }
   return sanitized;
 }
