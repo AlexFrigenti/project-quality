@@ -13,6 +13,8 @@ on:
       - "QUALITY_METRICS.md"
       - "schemas/**"
       - "scripts/generate-quality-metrics.mjs"
+      - "scripts/collect-quality-evidence.mjs"
+      - "scripts/test-quality-evidence.mjs"
       - "scripts/validate-quality-metrics.mjs"
       - "scripts/test-quality-metrics.mjs"
       - ".github/workflows/node-quality.yml"
@@ -30,6 +32,8 @@ on:
       - "QUALITY_METRICS.md"
       - "schemas/**"
       - "scripts/generate-quality-metrics.mjs"
+      - "scripts/collect-quality-evidence.mjs"
+      - "scripts/test-quality-evidence.mjs"
       - "scripts/validate-quality-metrics.mjs"
       - "scripts/test-quality-metrics.mjs"
       - ".github/workflows/node-quality.yml"
@@ -80,7 +84,7 @@ jobs:
           AUDIT_REPOSITORY: ${{ matrix.repository }}
           AUDIT_PROFILE: ${{ matrix.profile }}
           AUDIT_VISIBILITY: ${{ matrix.visibility }}
-          QUALITY_STANDARD_SHA: 28f01d394b9b212a302a49d010cd5e928052e8e8
+          QUALITY_STANDARD_SHA: e763e13404e52e9e9c2e87d51efaa3c3492dd27c
           OUTPUT_FILE: report-${{ matrix.id }}.json
         run: node scripts/audit-repository.mjs
 
@@ -104,6 +108,9 @@ jobs:
       - name: Validate quality metrics contract
         run: node scripts/test-quality-metrics.mjs
 
+      - name: Validate collector
+        run: node scripts/test-quality-evidence.mjs
+
       - name: Download audit reports
         uses: actions/download-artifact@v4
         with:
@@ -115,8 +122,8 @@ jobs:
         env:
           REPORTS_DIR: audit-reports
           OUTPUT_DIR: site
-          STANDARD_RELEASE: v1.0.0
-          STANDARD_SHA: 28f01d394b9b212a302a49d010cd5e928052e8e8
+          STANDARD_RELEASE: v1.1.0
+          STANDARD_SHA: e763e13404e52e9e9c2e87d51efaa3c3492dd27c
         run: node scripts/assemble-dashboard.mjs
 
       - name: Validate dashboard data
