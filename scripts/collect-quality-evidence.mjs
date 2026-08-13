@@ -19,10 +19,6 @@ function apiUrl(path) {
   return path.startsWith("http") ? path : API_ROOT + path;
 }
 
-function encodePath(path) {
-  return path.split("/").map((part) => encodeURIComponent(part)).join("/");
-}
-
 async function request(path) {
   try {
     const response = await fetch(apiUrl(path), { headers });
@@ -42,10 +38,11 @@ async function request(path) {
   }
 }
 
-async function readArtifactJson(artifact) {
-  const archiveUrl = artifact.archive_download_url || apiUrl("/repos/" + artifact.repository?.full_name + "/actions/artifacts/" + artifact.id + "/zip");
+async function readArtifactJson(artifact, repository) {
+  const archiveUrl = artifact.archive_download_url
+    || apiUrl("/repos/" + repository + "/actions/artifacts/" + artifact.id + "/zip");
   const response = await fetch(archiveUrl, { headers });
-  if (!response.ok) throw new Error("No se pudo descargar el artifact (HTTP " + response.status + ").");
+  if (!response.ok) throw new Error("No se pudo descargar el artifact.");
 
   const bytes = Buffer.from(await response.arrayBuffer());
   if (bytes.length > 10 * 1024 * 1024) throw new Error("El artifact supera el límite de seguridad.");
@@ -62,6 +59,7 @@ async function readArtifactJson(artifact) {
     const entries = listed.stdout.trim().split(/\r?\n/).filter(Boolean);
     const reportPath = entries.find((entry) => entry === "quality-metrics.json" || entry.endsWith("/quality-metrics.json"));
     if (!reportPath) throw new Error("El artifact no contiene quality-metrics.json.");
+
     const extracted = await execFileAsync("unzip", ["-p", archivePath, reportPath], {
       encoding: "utf8",
       maxBuffer: 1000000
@@ -97,12 +95,15 @@ function sanitizeMetricValue(value, path) {
   return sanitized;
 }
 
-function sanitizeEvidenceList(items) {
-  return items.map((item) => ({
-    kind: item.kind,
-    label: boundedText(item.label, 160),
-    url: item.url
-  }));
+function sanitizeEvidenceList(items, exposeLinks) {
+  return items.map((item) => {
+    const evidence = {
+      kind: item.kind,
+      label: boundedText(item.label, 160)
+    };
+    if (exposeLinks) evidence.url = item.url;
+    return evidence;
+  });
 }
 
 export function sanitizeQualityMetrics(report) {
@@ -141,13 +142,56 @@ export function sanitizeQualityMetrics(report) {
       applicability: gate.applicability,
       status: gate.status,
       details: boundedText(gate.details, 400),
-      evidence: sanitizeEvidenceList(gate.evidence)
+      evidence: sanitizeEvidenceList(gate.evidence, true)
     })),
     metrics: Object.fromEntries(
       Object.entries(report.metrics).map(([key, value]) => [key, sanitizeMetricValue(value, key)])
     ),
-    evidence: sanitizeEvidenceList(report.evidence)
+    evidence: sanitizeEvidenceList(report.evidence, true)
   };
+}
+
+export function buildQualitySummary(report, { exposeLinks = false } = {}) {
+  validateQualityMetrics(report);
+
+  const summary = {
+    conclusion: report.conclusion,
+    commit: {
+      sha: report.commit.sha,
+      ref: report.commit.ref,
+      branch: report.commit.branch,
+      event: report.commit.event
+    },
+    run: {
+      workflow: boundedText(report.run.workflow, 160),
+      id: report.run.id,
+      attempt: report.run.attempt,
+      startedAt: report.run.startedAt,
+      completedAt: report.run.completedAt
+    },
+    standard: {
+      version: report.standard.version,
+      sha: report.standard.sha
+    },
+    gates: report.gates.map((gate) => ({
+      id: gate.id,
+      label: boundedText(gate.label, 160),
+      applicability: gate.applicability,
+      status: gate.status,
+      details: boundedText(gate.details, 400),
+      evidence: sanitizeEvidenceList(gate.evidence, exposeLinks)
+    })),
+    metrics: Object.fromEntries(
+      Object.entries(report.metrics).map(([key, value]) => [key, sanitizeMetricValue(value, key)])
+    )
+  };
+
+  if (exposeLinks) {
+    summary.run.url = report.run.url;
+    summary.evidence = sanitizeEvidenceList(report.evidence, true);
+  }
+
+  return summary;
 }
 
 export function pendingQualityEvidence(currentCommitSha) {
@@ -157,7 +201,7 @@ export function pendingQualityEvidence(currentCommitSha) {
     currentCommitSha: currentCommitSha || null,
     validatedCommitSha: null,
     artifact: null,
-    report: null
+    summary: null
   };
 }
 
@@ -168,7 +212,7 @@ function unavailableQualityEvidence(message, currentCommitSha) {
     currentCommitSha: currentCommitSha || null,
     validatedCommitSha: null,
     artifact: null,
-    report: null
+    summary: null
   };
 }
 
@@ -176,7 +220,8 @@ export async function collectQualityEvidence({
   repository,
   defaultBranch = "main",
   currentCommitSha,
-  workflowFile = "quality.yml"
+  workflowFile = "quality.yml",
+  exposeLinks = false
 }) {
   if (!currentCommitSha) {
     return unavailableQualityEvidence("No se pudo resolver el HEAD actual de la rama estable.", currentCommitSha);
@@ -187,7 +232,7 @@ export async function collectQualityEvidence({
   const runsResponse = await request(runsPath);
   if (!runsResponse.ok) {
     return unavailableQualityEvidence(
-      "No se pudo consultar el historial de Actions (HTTP " + (runsResponse.status || "red") + ").",
+      "No se pudo consultar el historial de Actions.",
       currentCommitSha
     );
   }
@@ -205,31 +250,28 @@ export async function collectQualityEvidence({
     if (!artifact) continue;
 
     try {
-      const parsed = await readArtifactJson({
-        ...artifact,
-        repository: { full_name: repository }
-      });
-      const sanitized = sanitizeQualityMetrics(parsed);
+      const parsed = await readArtifactJson(artifact, repository);
+      const summary = buildQualitySummary(parsed, { exposeLinks });
 
-      if (sanitized.project.repository !== repository) continue;
-      if (sanitized.commit.sha !== currentCommitSha) continue;
-      if (sanitized.run.id !== run.id) continue;
+      if (summary.commit.sha !== currentCommitSha) continue;
+      if (summary.commit.branch !== defaultBranch) continue;
+      if (summary.run.id !== run.id) continue;
 
       return {
         status: "current",
         message: "Evidencia correspondiente exactamente al HEAD actual de la rama estable.",
         currentCommitSha,
-        validatedCommitSha: sanitized.commit.sha,
+        validatedCommitSha: summary.commit.sha,
         artifact: {
           id: artifact.id,
           name: artifact.name,
           createdAt: artifact.created_at || null,
           expiresAt: artifact.expires_at || null
         },
-        report: sanitized
+        summary
       };
     } catch {
-      // Un artifact inválido no se incorpora al dashboard. Se intenta otra ejecución del mismo commit.
+      // Un artifact inválido no se incorpora al dashboard.
     }
   }
 
