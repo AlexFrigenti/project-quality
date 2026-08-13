@@ -10,7 +10,7 @@ const nucleoSha = "3333333333333333333333333333333333333333";
 
 function currentReport({ id, repository, kind, visibility, sha, metrics, overall = "pass" }) {
   return {
-    repository: { id, fullName: repository, visibility, headSha: sha },
+    repository: { id, fullName: repository, visibility, defaultBranch: "main", headSha: sha },
     profile: { kind, notApplicableAreas: [] },
     overall,
     governance: { ruleset: { status: "pass" } },
@@ -18,10 +18,11 @@ function currentReport({ id, repository, kind, visibility, sha, metrics, overall
     checks: [{ id: "main-protection", status: "pass" }],
     qualityEvidence: {
       status: "current",
+      currentCommitSha: sha,
       validatedCommitSha: sha,
       summary: {
         conclusion: "passed",
-        commit: { sha },
+        commit: { sha, branch: "main" },
         run: { completedAt: "2026-08-13T10:00:00.000Z" },
         gates: [{ id: "tests", label: "Tests", applicability: "required", status: "passed", details: "Gate ejecutado correctamente." }],
         metrics
@@ -58,6 +59,7 @@ assert.equal(first.repositories.find((repo) => repo.id === "gestor-autonomo").vi
 assert.equal(first.repositories.find((repo) => repo.id === "gestor-autonomo").quality.metrics.coverage.lines, 86.4);
 assert.equal(first.repositories.find((repo) => repo.id === "gestor-autonomo").quality.run, undefined);
 assert.equal(/url|token|Bearer/i.test(JSON.stringify(first)), false);
+assert.throws(() => validateQualityHistory({ ...first, unexpected: true }), /no está permitido/);
 
 const rerun = buildQualityHistorySnapshot(data, { now: new Date("2026-08-13T11:05:00.000Z"), dashboardCommitSha: dashboardSha });
 assert.equal(rerun.id, first.id);
