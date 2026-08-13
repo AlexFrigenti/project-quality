@@ -45,7 +45,10 @@ function positiveInteger(value, key) {
 }
 
 function normalizeApplicability(value) {
-  return APPLICABILITIES.has(value) ? value : "unknown";
+  if (!APPLICABILITIES.has(value)) {
+    throw new Error("Applicability inválida para un gate: " + value);
+  }
+  return value;
 }
 
 function normalizeOutcome(value, applicability) {
