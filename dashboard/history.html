@@ -18,7 +18,7 @@
         --amber: #f5c76b;
         --red: #ff7f87;
         --blue: #7da8ff;
-        --shadow: 0 22px 60px rgba(0, 0, 0, .28);
+        --shadow: 0 16px 42px rgba(0, 0, 0, .22);
       }
 
       * { box-sizing: border-box; }
@@ -34,22 +34,92 @@
       }
       a { color: var(--cyan); text-decoration: none; }
       a:hover { text-decoration: underline; }
-      .shell { width: min(1050px, calc(100% - 36px)); margin: 0 auto; padding: 40px 0 56px; }
-      .back { display: inline-block; margin-bottom: 26px; font-size: 13px; font-weight: 800; }
-      .eyebrow { margin: 0 0 9px; color: var(--cyan); font-size: 11px; font-weight: 800; letter-spacing: .2em; text-transform: uppercase; }
+      .shell { width: min(1050px, calc(100% - 36px)); margin: 0 auto; padding: 30px 0 48px; }
+      .back { display: inline-block; margin-bottom: 16px; font-size: 13px; font-weight: 800; }
+      .eyebrow { margin: 0 0 7px; color: var(--cyan); font-size: 10px; font-weight: 800; letter-spacing: .2em; text-transform: uppercase; }
       h1, h2, h3, p { margin-top: 0; }
-      h1 { margin-bottom: 12px; font-size: clamp(34px, 6vw, 62px); line-height: .98; letter-spacing: -.055em; }
-      .lede { max-width: 700px; margin-bottom: 28px; color: var(--muted); font-size: 17px; }
-      .toolbar { display: flex; align-items: end; justify-content: space-between; gap: 18px; margin-bottom: 28px; padding: 17px; border: 1px solid var(--line); border-radius: 15px; background: rgba(11, 27, 47, .72); box-shadow: var(--shadow); }
-      label { display: grid; gap: 6px; color: var(--muted); font-size: 11px; font-weight: 800; letter-spacing: .06em; text-transform: uppercase; }
-      select { min-width: 260px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 9px; color: var(--text); background: var(--panel-strong); font: inherit; }
+      h1 { margin-bottom: 8px; font-size: clamp(32px, 5vw, 54px); line-height: .98; letter-spacing: -.055em; }
+      .lede { max-width: 760px; margin-bottom: 18px; color: var(--muted); font-size: 15px; }
+      .toolbar {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) auto;
+        align-items: end;
+        gap: 20px;
+        margin-bottom: 22px;
+        padding: 0 0 10px;
+        border-bottom: 1px solid var(--line);
+      }
+      .toolbar-projects { min-width: 0; }
+      .toolbar-label {
+        display: block;
+        margin-bottom: 7px;
+        color: var(--muted);
+        font-size: 10px;
+        font-weight: 800;
+        letter-spacing: .06em;
+        text-transform: uppercase;
+      }
+      .project-nav {
+        display: flex;
+        gap: 4px;
+        min-width: 0;
+        overflow-x: auto;
+        padding-bottom: 1px;
+        scrollbar-color: var(--line) transparent;
+      }
+      .project-tab {
+        flex: 1 1 0;
+        min-width: 145px;
+        padding: 9px 11px 10px;
+        border: 0;
+        border-bottom: 2px solid transparent;
+        border-radius: 9px 9px 0 0;
+        color: var(--muted);
+        background: transparent;
+        text-decoration: none;
+        transition: color .16s ease, background .16s ease, border-color .16s ease;
+      }
+      .project-tab:hover { color: var(--text); background: rgba(16, 36, 61, .46); text-decoration: none; }
+      .project-tab:focus-visible { outline: 2px solid var(--cyan); outline-offset: 2px; }
+      .project-tab.active { color: var(--text); border-bottom-color: var(--cyan); background: rgba(16, 36, 61, .68); }
+      .project-tab-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+      .project-tab-label { font-size: 12px; font-weight: 800; white-space: nowrap; }
+      .project-tab-meta { display: flex; align-items: center; gap: 5px; margin-top: 3px; color: var(--muted); font-size: 10px; white-space: nowrap; }
+      .project-status-dot { width: 8px; height: 8px; flex: 0 0 auto; border-radius: 50%; background: var(--blue); box-shadow: 0 0 0 3px rgba(125, 168, 255, .12); }
+      .project-status-dot.pass { background: var(--green); box-shadow: 0 0 0 3px rgba(81, 219, 155, .12); }
+      .project-status-dot.warning { background: var(--amber); box-shadow: 0 0 0 3px rgba(245, 199, 107, .12); }
+      .project-status-dot.fail { background: var(--red); box-shadow: 0 0 0 3px rgba(255, 127, 135, .12); }
+      .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
       .history-meta { color: var(--muted); font-size: 12px; text-align: right; }
       .history-meta strong { display: block; color: var(--text); font-size: 14px; }
-      .overview { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-bottom: 32px; }
-      .charts-panel { margin-bottom: 32px; padding: 20px; border: 1px solid var(--line); border-radius: 16px; background: rgba(11, 27, 47, .72); box-shadow: var(--shadow); }
-      .charts-heading { display: flex; align-items: end; justify-content: space-between; gap: 18px; margin-bottom: 16px; }
-      .charts-heading h2 { margin-bottom: 4px; font-size: 20px; letter-spacing: -.025em; }
-      .charts-heading p { margin-bottom: 0; color: var(--muted); font-size: 13px; }
+      .overview {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 0;
+        margin-bottom: 24px;
+        border-top: 1px solid var(--line);
+        border-bottom: 1px solid var(--line);
+      }
+      .stat {
+        min-width: 0;
+        padding: 13px 18px;
+        border: 0;
+        border-left: 1px solid var(--line);
+        border-radius: 0;
+        background: transparent;
+        box-shadow: none;
+      }
+      .stat:first-child { padding-left: 0; border-left: 0; }
+      .stat-label { display: block; color: var(--muted); font-size: 10px; font-weight: 800; letter-spacing: .05em; text-transform: uppercase; }
+      .stat-value { display: flex; align-items: baseline; flex-wrap: wrap; gap: 6px; margin-top: 4px; font-size: 24px; line-height: 1.1; letter-spacing: -.03em; }
+      .stat-unit { color: var(--muted); font-size: 11px; font-weight: 700; letter-spacing: 0; }
+      .stat-note { display: block; margin-top: 4px; overflow: hidden; color: var(--muted); font-size: 11px; text-overflow: ellipsis; white-space: nowrap; }
+      .charts-panel { margin: 28px 0 28px; padding: 18px; border: 1px solid var(--line); border-radius: 14px; background: rgba(11, 27, 47, .56); box-shadow: none; }
+      .charts-heading { display: flex; align-items: end; justify-content: space-between; gap: 18px; margin-bottom: 14px; }
+      .charts-heading h2 { margin-bottom: 3px; font-size: 19px; letter-spacing: -.025em; }
+      .charts-heading p { margin-bottom: 0; color: var(--muted); font-size: 12px; }
+      .charts-panel.is-empty { padding: 12px 16px; }
+      .charts-panel.is-empty .charts-heading { display: none; }
       .chart-grid { display: grid; gap: 14px; }
       .chart-card { padding: 16px; border: 1px solid var(--line); border-radius: 13px; background: linear-gradient(145deg, rgba(20, 43, 70, .72), rgba(10, 24, 42, .55)); }
       .chart-head { display: flex; align-items: start; justify-content: space-between; gap: 14px; }
@@ -67,15 +137,13 @@
       .chart-values th:last-child, .chart-values td:last-child { text-align: right; }
       .chart-details { margin-top: 7px; color: var(--muted); font-size: 11px; }
       .chart-details summary { cursor: pointer; color: var(--cyan); }
-      .chart-empty { padding: 16px; border: 1px dashed var(--line); border-radius: 10px; color: var(--muted); font-size: 13px; }
-      .stat { padding: 16px; border: 1px solid var(--line); border-radius: 13px; background: linear-gradient(145deg, rgba(20, 43, 70, .9), rgba(10, 24, 42, .75)); }
-      .stat-label { display: block; color: var(--muted); font-size: 11px; font-weight: 800; letter-spacing: .05em; text-transform: uppercase; }
-      .stat-value { display: block; margin-top: 7px; font-size: 22px; font-weight: 800; }
-      .timeline { position: relative; display: grid; gap: 15px; padding-left: 27px; }
+      .chart-empty { display: flex; align-items: baseline; gap: 8px; padding: 0; border: 0; color: var(--muted); font-size: 12px; }
+      .chart-empty strong { color: var(--text); font-size: 12px; }
+      .timeline { position: relative; display: grid; gap: 15px; margin-bottom: 28px; padding-left: 27px; }
       .timeline::before { content: ""; position: absolute; top: 6px; bottom: 6px; left: 8px; width: 1px; background: var(--line); }
-      .snapshot { position: relative; padding: 20px; border: 1px solid var(--line); border-radius: 16px; background: var(--panel); box-shadow: var(--shadow); }
-      .snapshot::before { content: ""; position: absolute; top: 25px; left: -24px; width: 9px; height: 9px; border: 3px solid var(--bg); border-radius: 50%; background: var(--cyan); box-shadow: 0 0 0 1px var(--cyan); }
-      .snapshot-head { display: flex; align-items: start; justify-content: space-between; gap: 14px; margin-bottom: 14px; }
+      .snapshot { position: relative; padding: 18px; border: 1px solid var(--line); border-radius: 15px; background: var(--panel); box-shadow: var(--shadow); }
+      .snapshot::before { content: ""; position: absolute; top: 23px; left: -24px; width: 9px; height: 9px; border: 3px solid var(--bg); border-radius: 50%; background: var(--cyan); box-shadow: 0 0 0 1px var(--cyan); }
+      .snapshot-head { display: flex; align-items: start; justify-content: space-between; gap: 14px; margin-bottom: 13px; }
       .snapshot-date { margin-bottom: 3px; font-size: 16px; font-weight: 800; }
       .snapshot-commit { color: var(--muted); font-size: 11px; }
       .status { display: inline-flex; padding: 4px 8px; border: 1px solid currentColor; border-radius: 999px; font-size: 10px; font-weight: 800; text-transform: uppercase; white-space: nowrap; }
@@ -83,8 +151,9 @@
       .status.warning, .status.pending, .status.skipped { color: var(--amber); }
       .status.fail, .status.failed { color: var(--red); }
       .status.unknown, .status.unavailable, .status.not-applicable { color: var(--blue); }
-      .snapshot-facts { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; margin-bottom: 16px; }
-      .fact { padding: 10px 11px; border: 1px solid var(--line); border-radius: 10px; background: rgba(7, 17, 31, .44); }
+      .snapshot-facts { display: grid; grid-template-columns: repeat(2, 1fr); gap: 0; margin-bottom: 15px; border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); }
+      .fact { min-width: 0; padding: 10px 14px; border: 0; border-left: 1px solid var(--line); border-radius: 0; background: transparent; }
+      .fact:first-child { padding-left: 0; border-left: 0; }
       .fact-label { display: block; color: var(--muted); font-size: 10px; letter-spacing: .05em; text-transform: uppercase; }
       .fact-value { display: block; margin-top: 3px; font-size: 13px; font-weight: 700; }
       .section-label { margin: 15px 0 8px; color: var(--muted); font-size: 10px; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; }
@@ -101,19 +170,29 @@
       .not-applicable li { color: var(--muted); }
       .empty, .error { padding: 28px; border: 1px dashed var(--line); border-radius: 15px; color: var(--muted); text-align: center; }
       .error { border-color: rgba(255, 127, 135, .4); color: var(--red); background: rgba(112, 24, 37, .15); }
-      footer { margin-top: 34px; padding-top: 18px; border-top: 1px solid var(--line); color: var(--muted); font-size: 12px; }
+      footer { margin-top: 28px; padding-top: 16px; border-top: 1px solid var(--line); color: var(--muted); font-size: 12px; }
 
       @media (max-width: 680px) {
-        .shell { width: min(100% - 24px, 1050px); padding-top: 28px; }
+        .shell { width: min(100% - 24px, 1050px); padding-top: 24px; }
         .toolbar { display: block; }
-        select { width: 100%; min-width: 0; }
-        .history-meta { margin-top: 14px; text-align: left; }
+        .project-nav { margin-right: -1px; padding-bottom: 2px; }
+        .project-tab { flex: 0 0 158px; }
+        .history-meta { margin-top: 12px; text-align: left; }
         .overview { grid-template-columns: 1fr; }
+        .stat, .stat:first-child { padding: 12px 0; border-left: 0; border-top: 1px solid var(--line); }
+        .stat:first-child { border-top: 0; }
+        .stat-note { white-space: normal; }
+        .charts-heading { display: block; }
+        .charts-heading p { margin-top: 5px; }
+        .charts-panel.is-empty .chart-empty { display: block; }
+        .charts-panel.is-empty .chart-empty span { display: block; margin-top: 3px; }
         .snapshot-head { display: block; }
         .snapshot-head .status { margin-top: 10px; }
         .snapshot-facts { grid-template-columns: 1fr; }
+        .fact, .fact:first-child { padding: 10px 0; border-left: 0; border-top: 1px solid var(--line); }
+        .fact:first-child { border-top: 0; }
       }
-    </style>
+</style>
   </head>
   <body>
     <main class="shell">
@@ -125,15 +204,18 @@
       </header>
 
       <section class="toolbar" aria-label="Filtro histórico">
-        <label>Proyecto
-          <select id="project-filter"></select>
-        </label>
+        <div class="toolbar-projects">
+          <span class="toolbar-label">Proyecto</span>
+          <nav id="project-nav" class="project-nav" aria-label="Proyectos auditados"></nav>
+        </div>
         <div class="history-meta" id="history-meta">Cargando histórico…</div>
       </section>
 
       <section class="overview" id="overview" aria-label="Resumen del histórico"></section>
 
-      <section class="charts-panel" aria-labelledby="metrics-heading">
+      <section id="timeline" class="timeline" aria-live="polite"></section>
+
+      <section id="charts-panel" class="charts-panel" aria-labelledby="metrics-heading">
         <div class="charts-heading">
           <div>
             <p class="eyebrow">Métricas reales</p>
@@ -144,7 +226,6 @@
         </div>
         <div id="metric-charts" class="chart-grid" aria-live="polite"></div>
       </section>
-      <section id="timeline" class="timeline" aria-live="polite"></section>
 
       <footer>
         Los snapshots están sanitizados y proceden de los assets persistentes del histórico de calidad.
@@ -310,34 +391,118 @@
       }
 
       function renderMetricCharts(records) {
+        const panel = document.getElementById("charts-panel");
         const container = document.getElementById("metric-charts");
         const meta = document.getElementById("charts-meta");
         const series = collectMetricSeries(records);
         if (!series.length) {
-          meta.textContent = "Sin series suficientes";
-          container.innerHTML = '<div class="chart-empty">Los gráficos aparecerán cuando una métrica numérica tenga al menos dos observaciones históricas validadas. Los valores con una sola observación siguen disponibles dentro de cada snapshot.</div>';
+          panel.classList.add("is-empty");
+          meta.textContent = "";
+          container.innerHTML = '<div class="chart-empty"><strong>Gráficos pendientes</strong><span>Se mostrarán cuando exista una métrica numérica con al menos dos observaciones históricas validadas.</span></div>';
           return;
         }
+        panel.classList.remove("is-empty");
         meta.textContent = series.length + (series.length === 1 ? " serie" : " series");
         container.innerHTML = series.map(renderMetricChart).join("");
       }
 
-      function renderSelect(snapshots, selected) {
-        const ids = new Set();
-        snapshots.forEach((snapshot) => snapshot.repositories.forEach((repository) => ids.add(repository.id)));
-        const options = [...ids].map((id) => '<option value="' + escapeHtml(id) + '"' + (id === selected ? " selected" : "") + '>' + escapeHtml(projectLabels[id] || id) + '</option>');
-        document.getElementById("project-filter").innerHTML = options.join("");
+      function renderProjectNav(snapshots, selected) {
+        const latestById = new Map();
+        const ids = [];
+        snapshots.forEach((snapshot) => snapshot.repositories.forEach((repository) => {
+          if (latestById.has(repository.id)) return;
+          latestById.set(repository.id, { snapshot, repository });
+          ids.push(repository.id);
+        }));
+
+        const links = ids.map((id) => {
+          const entry = latestById.get(id);
+          const quality = entry.repository.quality || {};
+          const statusValue = quality.status === "current" ? quality.conclusion : quality.status;
+          const status = statusClass(statusValue);
+          const statusText = quality.status === "current"
+            ? qualityLabel(quality)
+            : (quality.message || "Sin evidencia");
+          const snapshotCount = snapshots.filter((snapshot) => snapshot.repositories.some((repository) => repository.id === id)).length;
+          const snapshotLabel = snapshotCount === 1 ? "snapshot" : "snapshots";
+          const href = "./history.html?project=" + encodeURIComponent(id);
+          const active = id === selected ? " active" : "";
+          const current = id === selected ? ' aria-current="page"' : "";
+
+          return '<a class="project-tab' + active + '" href="' + escapeHtml(href) + '"' + current + '>' +
+            '<span class="project-tab-head"><span class="project-tab-label">' + escapeHtml(projectLabels[id] || id) + '</span>' +
+            '<span class="project-status-dot ' + escapeHtml(status) + '" title="' + escapeHtml(statusText) + '" aria-hidden="true"></span></span>' +
+            '<span class="project-tab-meta">' + snapshotCount + ' ' + snapshotLabel + ' · ' + escapeHtml(statusText) + '</span>' +
+            '<span class="sr-only">' + escapeHtml(statusText) + '</span>' +
+            '</a>';
+        }).join("");
+
+        document.getElementById("project-nav").innerHTML = links;
+      }
+
+      function formatCompactDate(value) {
+        const date = new Date(value);
+        const datePart = new Intl.DateTimeFormat("es-ES", { day: "numeric", month: "short" }).format(date).replace(/\./g, "");
+        const timePart = new Intl.DateTimeFormat("es-ES", { hour: "2-digit", minute: "2-digit" }).format(date);
+        return datePart + " · " + timePart;
+      }
+
+      function summarizeGates(quality) {
+        if (!quality || quality.status !== "current") return null;
+        const gates = Array.isArray(quality.gates) ? quality.gates : [];
+        const applicable = gates.filter((gate) => gate.applicability !== "not-applicable");
+        return {
+          total: applicable.length,
+          passed: applicable.filter((gate) => gate.status === "passed").length,
+          failed: applicable.filter((gate) => gate.status === "failed").length,
+          skipped: applicable.filter((gate) => gate.status === "skipped").length,
+          unknown: applicable.filter((gate) => gate.status === "unknown").length,
+          notApplicable: gates.length - applicable.length
+        };
       }
 
       function renderOverview(records) {
         const latest = records[0];
-        const qualityCurrent = records.filter((record) => record.repository.quality.status === "current").length;
+        const quality = latest?.repository?.quality;
+        const gateSummary = summarizeGates(quality);
+        const commitSha = quality?.commitSha || quality?.currentHeadSha;
+        const gateNotes = [];
+
+        if (gateSummary) {
+          if (gateSummary.notApplicable > 0) gateNotes.push(gateSummary.notApplicable + " no aplican");
+          if (gateSummary.failed > 0) gateNotes.push(gateSummary.failed + " con fallo");
+          if (gateSummary.skipped > 0) gateNotes.push(gateSummary.skipped + " omitidos");
+          if (gateSummary.unknown > 0) gateNotes.push(gateSummary.unknown + " sin evidencia");
+          if (!gateNotes.length) gateNotes.push("Todos los gates aplicables");
+        }
+
         const items = [
-          ["Snapshots", records.length],
-          ["Evidencia actual", qualityCurrent + " / " + records.length],
-          ["Última validación", latest ? formatDate(latest.snapshot.generatedAt) : "—"]
+          {
+            label: "Snapshots",
+            value: String(records.length),
+            unit: records.length === 1 ? "snapshot" : "snapshots",
+            note: "Histórico validado"
+          },
+          {
+            label: "Gates correctos",
+            value: gateSummary ? gateSummary.passed + " / " + gateSummary.total : "—",
+            unit: gateSummary ? "correctos" : "",
+            note: gateNotes.join(" · ") || (quality?.message || "Sin evidencia")
+          },
+          {
+            label: "Última validación",
+            value: latest ? formatCompactDate(latest.snapshot.generatedAt) : "—",
+            unit: "",
+            note: commitSha ? "Commit " + shortSha(commitSha) : "Sin evidencia"
+          }
         ];
-        document.getElementById("overview").innerHTML = items.map(([label, value]) => '<article class="stat"><span class="stat-label">' + escapeHtml(label) + '</span><span class="stat-value">' + escapeHtml(value) + '</span></article>').join("");
+
+        document.getElementById("overview").innerHTML = items.map((item) =>
+          '<article class="stat"><span class="stat-label">' + escapeHtml(item.label) + '</span>' +
+          '<strong class="stat-value">' + escapeHtml(item.value) +
+          (item.unit ? '<small class="stat-unit">' + escapeHtml(item.unit) + '</small>' : "") +
+          '</strong><span class="stat-note">' + escapeHtml(item.note) + '</span></article>'
+        ).join("");
       }
 
       function renderSnapshot(record) {
@@ -403,13 +568,8 @@
             return;
           }
 
-          renderSelect(index.snapshots, selected);
+          renderProjectNav(index.snapshots, selected);
           renderHistory(index, selected);
-          document.getElementById("project-filter").addEventListener("change", (event) => {
-            const next = event.target.value;
-            window.history.replaceState({}, "", "./history.html?project=" + encodeURIComponent(next));
-            renderHistory(index, next);
-          });
         } catch (error) {
           document.getElementById("history-meta").textContent = "Histórico no disponible";
           document.getElementById("timeline").innerHTML = '<div class="error">No se pudo cargar el histórico persistente. Ejecuta el workflow de calidad de main para generarlo.</div>';
