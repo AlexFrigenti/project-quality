@@ -15,6 +15,10 @@ on:
       - "scripts/generate-quality-metrics.mjs"
       - "scripts/collect-quality-evidence.mjs"
       - "scripts/test-quality-evidence.mjs"
+      - "schemas/quality-history.schema.json"
+      - "scripts/validate-quality-history.mjs"
+      - "scripts/persist-quality-history.mjs"
+      - "scripts/test-quality-history.mjs"
       - "scripts/validate-quality-metrics.mjs"
       - "scripts/test-quality-metrics.mjs"
       - ".github/workflows/node-quality.yml"
@@ -143,6 +147,31 @@ jobs:
           name: quality-dashboard-site
           path: site
           if-no-files-found: error
+
+
+  history:
+    name: Persist quality history
+    if: github.event_name != 'pull_request' && needs.assemble.result == 'success'
+    needs: assemble
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      actions: read
+    steps:
+      - name: Checkout dashboard source
+        uses: actions/checkout@v4
+
+      - name: Download Pages source
+        uses: actions/download-artifact@v4
+        with:
+          name: quality-dashboard-site
+          path: site
+
+      - name: Persist sanitized snapshot
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          HISTORY_SITE_DIR: site
+        run: node scripts/persist-quality-history.mjs
 
   deploy:
     name: Deploy dashboard to Pages
