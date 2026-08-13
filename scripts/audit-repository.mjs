@@ -132,7 +132,7 @@ function overallStatus(report) {
 }
 
 const displayName = repository.split("/").at(-1);
-const publicUrl = visibility === "private" ? null : `https://github.com/${repository}`;
+let publicUrl = visibility === "private" ? null : `https://github.com/${repository}`;
 const report = {
   schemaVersion: 1,
   generatedAt: new Date().toISOString(),
@@ -187,6 +187,11 @@ if (!repoResponse.ok) {
 const repo = repoResponse.data;
 report.repository.defaultBranch = repo.default_branch || null;
 report.repository.visibility = repo.visibility || visibility;
+if (report.repository.visibility === "private") {
+  publicUrl = null;
+  report.repository.url = null;
+  report.workflow.url = null;
+}
 addCheck(
   report,
   "default-branch",
@@ -267,7 +272,8 @@ if (!workflowResponse.ok || !workflowResponse.data?.content) {
   if (report.workflow.status === "fail") addIssue(report, detail);
 }
 
-const runsPath = `/repos/${repository}/actions/workflows/${encodePath(profile.workflowPath)}/runs?branch=${encodeURIComponent(repo.default_branch || "main")}&per_page=1`;
+const workflowFile = profile.workflowPath.split("/").at(-1);
+const runsPath = `/repos/${repository}/actions/workflows/${encodeURIComponent(workflowFile)}/runs?branch=${encodeURIComponent(repo.default_branch || "main")}&per_page=1`;
 const runsResponse = await request(runsPath);
 if (runsResponse.ok) {
   const run = runsResponse.data?.workflow_runs?.[0] || null;

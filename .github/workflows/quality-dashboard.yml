@@ -47,7 +47,7 @@ jobs:
           - id: nexo
             repository: AlexFrigenti/Nexo
             profile: nexo
-            visibility: public
+            visibility: private
           - id: nucleo
             repository: AlexFrigenti/Nucleo
             profile: nucleo
