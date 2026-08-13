@@ -25,7 +25,7 @@ const data = {
   source: {
     repository: "AlexFrigenti/project-quality",
     commit: process.env.GITHUB_SHA || null,
-    standardRelease: process.env.STANDARD_RELEASE || "v1.0.0",
+    standardRelease: process.env.STANDARD_RELEASE || "v1.1.0",
     standardSha: process.env.STANDARD_SHA || null
   },
   summary: {
@@ -36,6 +36,8 @@ const data = {
     protectedMain: count((report) => report.governance?.ruleset?.status === "pass"),
     pinnedWorkflows: count((report) => report.workflow?.status === "pass"),
     qualityGreen: count((report) => report.qualityRun?.status === "pass"),
+    qualityCurrent: count((report) => report.qualityEvidence?.status === "current"),
+    qualityPending: count((report) => report.qualityEvidence?.status === "pending"),
     accessRequired: count((report) => report.repository?.access === "required")
   },
   repositories: orderedReports
