@@ -1,0 +1,139 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://raw.githubusercontent.com/AlexFrigenti/project-quality/main/schemas/quality-history.schema.json",
+  "title": "Project Quality History Snapshot",
+  "description": "Sanitized historical snapshot of process and quality evidence for the validated main commits.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "id",
+    "generatedAt",
+    "dashboardCommitSha",
+    "standard",
+    "repositories"
+  ],
+  "properties": {
+    "schemaVersion": { "const": 1 },
+    "id": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+    "generatedAt": { "type": "string", "format": "date-time" },
+    "dashboardCommitSha": { "type": "string", "pattern": "^[0-9a-f]{40}$" },
+    "standard": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["release", "sha"],
+      "properties": {
+        "release": { "type": "string", "minLength": 1, "maxLength": 40 },
+        "sha": { "type": "string", "pattern": "^[0-9a-f]{40}$" }
+      }
+    },
+    "repositories": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "#/$defs/repository" }
+    }
+  },
+  "$defs": {
+    "metricValue": {
+      "oneOf": [
+        { "type": "number", "minimum": 0 },
+        {
+          "type": "object",
+          "minProperties": 1,
+          "additionalProperties": { "$ref": "#/$defs/metricValue" }
+        }
+      ]
+    },
+    "gate": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "label", "applicability", "status", "details"],
+      "properties": {
+        "id": { "type": "string", "pattern": "^[a-z0-9][a-z0-9-]*$" },
+        "label": { "type": "string", "minLength": 1, "maxLength": 160 },
+        "applicability": { "enum": ["required", "optional", "not-applicable"] },
+        "status": { "enum": ["passed", "failed", "skipped", "not-applicable", "unknown"] },
+        "details": { "type": "string", "minLength": 1, "maxLength": 400 }
+      }
+    },
+    "process": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["overall", "mainProtection", "workflow", "checks"],
+      "properties": {
+        "overall": { "enum": ["pass", "warning", "fail", "unknown", "pending", "missing", "not_applicable"] },
+        "mainProtection": { "enum": ["pass", "warning", "fail", "unknown", "pending", "missing", "not_applicable"] },
+        "workflow": { "enum": ["pass", "warning", "fail", "unknown", "pending", "missing", "not_applicable"] },
+        "checks": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["id", "status"],
+            "properties": {
+              "id": { "type": "string", "pattern": "^[a-z0-9][a-z0-9-]*$" },
+              "status": { "enum": ["pass", "warning", "fail", "unknown", "pending", "missing", "not_applicable"] }
+            }
+          }
+        }
+      }
+    },
+    "quality": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["status", "gates", "metrics"],
+      "properties": {
+        "status": { "enum": ["current", "pending", "unavailable"] },
+        "currentHeadSha": { "type": "string", "pattern": "^[0-9a-f]{40}$" },
+        "commitSha": { "type": "string", "pattern": "^[0-9a-f]{40}$" },
+        "validatedAt": { "type": "string", "format": "date-time" },
+        "conclusion": { "enum": ["passed", "failed", "unknown"] },
+        "message": { "type": "string", "minLength": 1, "maxLength": 200 },
+        "gates": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/gate" } },
+        "metrics": {
+          "type": "object",
+          "additionalProperties": { "$ref": "#/$defs/metricValue" }
+        }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "status": { "const": "current" } } },
+          "then": {
+            "required": ["commitSha", "validatedAt", "conclusion"],
+            "not": { "anyOf": [{ "required": ["message"] }, { "required": ["currentHeadSha"] }] }
+          }
+        },
+        {
+          "if": { "properties": { "status": { "enum": ["pending", "unavailable"] } } },
+          "then": {
+            "required": ["message"],
+            "not": {
+              "anyOf": [
+                { "required": ["commitSha"] },
+                { "required": ["validatedAt"] },
+                { "required": ["conclusion"] }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    "repository": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "repository", "kind", "visibility", "notApplicableAreas", "process", "quality"],
+      "properties": {
+        "id": { "type": "string", "pattern": "^[a-z0-9][a-z0-9-]*$" },
+        "repository": { "type": "string", "pattern": "^[^/]+/[^/]+$" },
+        "kind": { "enum": ["node", "static"] },
+        "visibility": { "enum": ["public", "private"] },
+        "notApplicableAreas": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1, "maxLength": 120 }
+        },
+        "process": { "$ref": "#/$defs/process" },
+        "quality": { "$ref": "#/$defs/quality" }
+      }
+    }
+  }
+}

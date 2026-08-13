@@ -46,6 +46,14 @@ El workflow genera un artefacto estático y, en `main`, intenta desplegarlo en P
 
 El dashboard no tiene backend, base de datos ni proveedor externo. Solo contiene el informe agregado generado por Actions.
 
+## Histórico persistente
+
+El workflow conserva snapshots sanitizados en releases mensuales de `project-quality`. Cada release usa el formato `quality-history-YYYY-MM` y cada snapshot se publica como un asset inmutable `quality-snapshot-<sha256>.json`.
+
+El identificador se calcula a partir del estado normalizado de los cuatro proyectos, sus commits validados, gates, métricas y controles de proceso. Una reejecución idéntica no crea otro snapshot. Si no existe ninguna evidencia actual validada, no se inventa una entrada histórica.
+
+El contrato y las reglas de privacidad están documentados en [QUALITY_HISTORY.md](QUALITY_HISTORY.md). Los gráficos de evolución se añadirán en una fase posterior y solo usarán métricas cuantificables reales.
+
 ## Estado actual y evolución
 
-La versión actual combina la auditoría de proceso con la evidencia del commit actual. No calcula una nota global ni porcentajes artificiales. La siguiente iteración puede guardar snapshots sanitizados por commit validado de `main` para construir evolución histórica, siempre que las métricas sigan teniendo evidencia y significado para cada proyecto.
+La versión actual combina la auditoría de proceso con la evidencia real del commit actual. No calcula una nota global ni porcentajes artificiales. El histórico persistente ya conserva los estados validados fuera de la retención de artifacts y prepara la siguiente fase: lectura de snapshots y gráficos de evolución.

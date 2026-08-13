@@ -8,6 +8,8 @@ Este repositorio no contiene código de una aplicación concreta. Contiene regla
 
 - [QUALITY_STANDARD.md](QUALITY_STANDARD.md): contrato común de calidad.
 - [QUALITY_METRICS.md](QUALITY_METRICS.md): contrato de evidencia estructurada producido por los workflows.
+- [QUALITY_HISTORY.md](QUALITY_HISTORY.md): contrato y persistencia del histórico sanitizado.
+- [schemas/quality-history.schema.json](schemas/quality-history.schema.json): esquema versionado de cada snapshot histórico.
 - [DASHBOARD.md](DASHBOARD.md): auditoría de proceso y evidencia real en GitHub Pages.
 - [CONTRIBUTING.md](CONTRIBUTING.md): flujo de trabajo para cambios y Pull Requests.
 - [AGENTS.md](AGENTS.md): instrucciones para agentes de IA que trabajen en los repositorios.
@@ -82,3 +84,7 @@ jobs:
 ```
 
 La validación no debe limitarse a devolver un código cero: debe comprobar contratos reales del proyecto, como referencias de recursos, versiones, artefactos o invariantes de estado.
+
+## Histórico persistente
+
+El workflow del dashboard guarda snapshots sanitizados de los estados validados en releases mensuales de GitHub. No se crean commits automáticos sobre `main`, no se duplica una reejecución idéntica y todavía no se calculan puntuaciones ni gráficos artificiales. Consulta [QUALITY_HISTORY.md](QUALITY_HISTORY.md) para el contrato y las reglas de deduplicación.
