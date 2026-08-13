@@ -157,17 +157,88 @@
       .fact-label { display: block; color: var(--muted); font-size: 10px; letter-spacing: .05em; text-transform: uppercase; }
       .fact-value { display: block; margin-top: 3px; font-size: 13px; font-weight: 700; }
       .section-label { margin: 15px 0 8px; color: var(--muted); font-size: 10px; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; }
-      .gates, .metrics, .not-applicable { display: flex; flex-wrap: wrap; gap: 7px; margin: 0; padding: 0; list-style: none; }
-      .gate, .metric, .not-applicable li { padding: 7px 9px; border: 1px solid var(--line); border-radius: 8px; background: rgba(16, 36, 61, .58); font-size: 11px; }
-      .gate { display: inline-flex; align-items: center; gap: 7px; }
-      .gate strong { color: var(--text); }
-      .gate span { font-weight: 800; text-transform: uppercase; }
-      .gate .passed { color: var(--green); }
-      .gate .failed { color: var(--red); }
-      .gate .skipped { color: var(--amber); }
-      .gate .unknown, .gate .not-applicable { color: var(--blue); }
-      .metric strong { color: var(--cyan); }
-      .not-applicable li { color: var(--muted); }
+      .gates {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 0 22px;
+        margin: 0;
+        padding: 0;
+        border-top: 1px solid var(--line);
+        list-style: none;
+      }
+      .gate {
+        display: grid;
+        grid-template-columns: 24px minmax(0, 1fr);
+        align-items: center;
+        gap: 10px;
+        min-width: 0;
+        min-height: 48px;
+        padding: 8px 0;
+        border-bottom: 1px solid var(--line);
+      }
+      .gate-icon {
+        display: grid;
+        width: 24px;
+        height: 24px;
+        place-items: center;
+        border-radius: 50%;
+        color: var(--muted);
+        background: rgba(142, 168, 194, .12);
+        font-size: 12px;
+        font-weight: 900;
+      }
+      .gate-content {
+        display: flex;
+        align-items: baseline;
+        justify-content: space-between;
+        gap: 10px;
+        min-width: 0;
+      }
+      .gate strong {
+        min-width: 0;
+        overflow: hidden;
+        color: var(--text);
+        font-size: 12px;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+      .gate-status {
+        flex: 0 0 auto;
+        font-size: 10px;
+        font-weight: 800;
+        letter-spacing: .04em;
+        text-transform: uppercase;
+      }
+      .gate-passed .gate-icon { color: var(--green); background: rgba(81, 219, 155, .13); }
+      .gate-failed .gate-icon { color: var(--red); background: rgba(255, 127, 135, .13); }
+      .gate-skipped .gate-icon { color: var(--amber); background: rgba(245, 199, 107, .13); }
+      .gate-not-applicable .gate-icon { color: var(--blue); background: rgba(125, 168, 255, .13); }
+      .gate-unknown .gate-icon { color: var(--amber); background: rgba(245, 199, 107, .13); }
+      .gate-status.passed { color: var(--green); }
+      .gate-status.failed { color: var(--red); }
+      .gate-status.skipped { color: var(--amber); }
+      .gate-status.not-applicable { color: var(--blue); }
+      .gate-status.unknown { color: var(--amber); }
+      .metrics {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 0 20px;
+        margin: 0;
+        padding: 0;
+        border-top: 1px solid var(--line);
+      }
+      .metric-group {
+        min-width: 0;
+        padding: 11px 0 10px;
+        border-bottom: 1px solid var(--line);
+      }
+      .metric-group-title { margin: 0 0 8px; color: var(--text); font-size: 12px; font-weight: 800; }
+      .metric-readings { display: flex; flex-wrap: wrap; gap: 7px 14px; }
+      .metric-reading { display: inline-flex; align-items: baseline; gap: 4px; min-width: 0; }
+      .metric-reading strong { color: var(--cyan); font-size: 16px; letter-spacing: -.02em; }
+      .metric-reading span { color: var(--muted); font-size: 10px; font-weight: 700; }
+      .not-applicable { display: flex; flex-wrap: wrap; gap: 7px 14px; margin: 0; padding: 0; list-style: none; }
+      .not-applicable li { color: var(--muted); font-size: 11px; }
       .empty, .error { padding: 28px; border: 1px dashed var(--line); border-radius: 15px; color: var(--muted); text-align: center; }
       .error { border-color: rgba(255, 127, 135, .4); color: var(--red); background: rgba(112, 24, 37, .15); }
       footer { margin-top: 28px; padding-top: 16px; border-top: 1px solid var(--line); color: var(--muted); font-size: 12px; }
@@ -184,6 +255,8 @@
         .stat-note { white-space: normal; }
         .charts-heading { display: block; }
         .charts-heading p { margin-top: 5px; }
+        .gates, .metrics { grid-template-columns: 1fr; }
+        .gate-content { align-items: flex-start; flex-direction: column; gap: 2px; }
         .charts-panel.is-empty .chart-empty { display: block; }
         .charts-panel.is-empty .chart-empty span { display: block; margin-top: 3px; }
         .snapshot-head { display: block; }
@@ -258,6 +331,35 @@
         unknown: "Sin evidencia"
       };
 
+      const metricGroupLabels = {
+        tests: "Tests",
+        suites: "Suites",
+        coverage: "Cobertura"
+      };
+
+      const metricFieldLabels = {
+        tests: {
+          total: "ejecutados",
+          passed: "correctos",
+          failed: "fallidos",
+          skipped: "omitidos",
+          cancelled: "cancelados"
+        },
+        suites: {
+          total: "ejecutadas",
+          passed: "correctas",
+          failed: "fallidas",
+          skipped: "omitidas",
+          cancelled: "canceladas"
+        },
+        coverage: {
+          lines: "líneas",
+          statements: "sentencias",
+          functions: "funciones",
+          branches: "ramas"
+        }
+      };
+
       function escapeHtml(value) {
         return String(value ?? "").replace(/[&<>'"]/g, (character) => ({
           "&": "&amp;",
@@ -306,8 +408,24 @@
         return String(value) + (/coverage/i.test(path) ? "%" : "");
       }
 
+      function prettyMetricPart(value) {
+        const words = String(value).replace(/[-_]/g, " ").split(" ");
+        return words.map((word) => word ? word.charAt(0).toUpperCase() + word.slice(1) : word).join(" ");
+      }
+
+      function metricGroupLabel(groupKey) {
+        return metricGroupLabels[groupKey] || prettyMetricPart(groupKey);
+      }
+
+      function metricLeafLabel(groupKey, leaf) {
+        return metricFieldLabels[groupKey]?.[leaf] || leaf.split(" · ").map((part) => part.replace(/[-_]/g, " ")).join(" · ");
+      }
+
       function metricPathLabel(path) {
-        return path.split(" · ").map((part) => part.replace(/[-_]/g, " ")).join(" · ");
+        const [groupKey, ...leafParts] = path.split(" · ");
+        if (!leafParts.length) return metricGroupLabel(groupKey);
+        const leafLabel = metricLeafLabel(groupKey, leafParts.join(" · "));
+        return metricGroupLabel(groupKey) + " · " + prettyMetricPart(leafLabel);
       }
 
       function formatShortDate(value) {
@@ -505,16 +623,57 @@
         ).join("");
       }
 
+      function gateSymbol(status) {
+        return {
+          passed: "✓",
+          failed: "×",
+          skipped: "–",
+          "not-applicable": "·",
+          unknown: "?"
+        }[status] || "?";
+      }
+
+      function renderMetricGroups(metrics) {
+        const groups = new Map();
+        flattenMetrics(metrics || {}, "").forEach(([path, value]) => {
+          if (!path) return;
+          const [groupKey, ...leafParts] = path.split(" · ");
+          if (!groups.has(groupKey)) groups.set(groupKey, []);
+          groups.get(groupKey).push({
+            path,
+            label: leafParts.length ? metricLeafLabel(groupKey, leafParts.join(" · ")) : metricGroupLabel(groupKey),
+            value
+          });
+        });
+
+        const orderedGroups = [...groups.entries()].sort(([left], [right]) => {
+          const order = ["tests", "suites", "coverage"];
+          const leftIndex = order.indexOf(left);
+          const rightIndex = order.indexOf(right);
+          return (leftIndex < 0 ? order.length : leftIndex) - (rightIndex < 0 ? order.length : rightIndex);
+        });
+
+        return orderedGroups.map(([groupKey, entries]) =>
+          '<article class="metric-group"><h3 class="metric-group-title">' + escapeHtml(metricGroupLabel(groupKey)) + '</h3>' +
+          '<div class="metric-readings">' +
+          entries.map((entry) => '<div class="metric-reading"><strong>' + escapeHtml(formatMetric(entry.path, entry.value)) + '</strong><span>' + escapeHtml(entry.label) + '</span></div>').join("") +
+          '</div></article>'
+        ).join("");
+      }
+
       function renderSnapshot(record) {
         const snapshot = record.snapshot;
         const repository = record.repository;
         const quality = repository.quality;
         const process = repository.process;
         const gates = quality.status === "current" ? (quality.gates || []).map((gate) => {
-          const gateStatus = gate.status || "unknown";
-          return '<li class="gate"><strong>' + escapeHtml(gate.label) + '</strong><span class="' + escapeHtml(gateStatus) + '">' + escapeHtml(qualityLabels[gateStatus] || "Sin evidencia") + '</span></li>';
+          const gateStatus = ["passed", "failed", "skipped", "not-applicable", "unknown"].includes(gate.status) ? gate.status : "unknown";
+          return '<li class="gate gate-' + escapeHtml(gateStatus) + '">' +
+            '<span class="gate-icon" aria-hidden="true">' + escapeHtml(gateSymbol(gateStatus)) + '</span>' +
+            '<span class="gate-content"><strong>' + escapeHtml(gate.label) + '</strong><span class="gate-status ' + escapeHtml(gateStatus) + '">' + escapeHtml(qualityLabels[gateStatus] || "Sin evidencia") + '</span></span>' +
+            '</li>';
         }).join("") : "";
-        const metrics = quality.status === "current" ? flattenMetrics(quality.metrics || {}, "").map(([path, value]) => '<li class="metric">' + escapeHtml(path) + ': <strong>' + escapeHtml(formatMetric(path, value)) + '</strong></li>').join("") : "";
+        const metrics = quality.status === "current" ? renderMetricGroups(quality.metrics || {}) : "";
         const notApplicable = repository.notApplicableAreas.map((area) => '<li>' + escapeHtml(area) + ' · No aplica</li>').join("");
         const qualityDetail = quality.status === "current"
           ? qualityLabel(quality)
@@ -530,7 +689,7 @@
           '<div class="fact"><span class="fact-label">Commit validado</span><span class="fact-value"><code>' + escapeHtml(shortSha(quality.commitSha || quality.currentHeadSha)) + '</code></span></div>',
           '</div>',
           gates ? '<div class="section-label">Gates</div><ul class="gates">' + gates + '</ul>' : '',
-          metrics ? '<div class="section-label">Métricas cuantificables</div><ul class="metrics">' + metrics + '</ul>' : '',
+          metrics ? '<div class="section-label">Métricas cuantificables</div><div class="metrics">' + metrics + '</div>' : '',
           notApplicable ? '<div class="section-label">No aplica por perfil</div><ul class="not-applicable">' + notApplicable + '</ul>' : '',
           '</article>'
         ].join("");
