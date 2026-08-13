@@ -560,8 +560,6 @@
           const queryProject = new URLSearchParams(window.location.search).get("project");
           const selected = ids.has(queryProject) ? queryProject : [...ids][0];
 
-          renderProjectNav(index.snapshots, selected);
-
           if (!selected) {
             document.getElementById("history-meta").textContent = "Sin snapshots disponibles";
             document.getElementById("timeline").innerHTML = '<div class="empty">El histórico aparecerá cuando se valide un commit de main.</div>';
