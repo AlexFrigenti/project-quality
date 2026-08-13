@@ -148,7 +148,7 @@ export function validateQualityHistory(snapshot) {
   });
 
   if (TOKEN_PATTERN.test(JSON.stringify(snapshot))) fail("El histórico contiene un patrón que parece un token");
-  if (/(^|["'])url("|:)/i.test(JSON.stringify(snapshot))) fail("El histórico no puede contener URLs");
+  if (/(https?:\/\/|(^|["'])url("|:))/i.test(JSON.stringify(snapshot))) fail("El histórico no puede contener URLs");
   return true;
 }
 
