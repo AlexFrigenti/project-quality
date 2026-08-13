@@ -1,0 +1,239 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="color-scheme" content="dark">
+    <title>Project Quality · Audit console</title>
+    <style>
+      :root {
+        --bg: #07111f;
+        --panel: rgba(15, 29, 50, .86);
+        --panel-strong: #10243d;
+        --line: rgba(145, 179, 214, .16);
+        --text: #edf6ff;
+        --muted: #8ea8c2;
+        --cyan: #51d6ed;
+        --green: #51db9b;
+        --amber: #f5c76b;
+        --red: #ff7f87;
+        --blue: #7da8ff;
+        --shadow: 0 22px 60px rgba(0, 0, 0, .28);
+      }
+
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        min-height: 100vh;
+        color: var(--text);
+        background:
+          radial-gradient(circle at 12% -5%, rgba(55, 130, 187, .28), transparent 34rem),
+          radial-gradient(circle at 90% 0%, rgba(22, 92, 127, .18), transparent 30rem),
+          var(--bg);
+        font: 15px/1.55 Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      }
+
+      a { color: var(--cyan); text-decoration: none; }
+      a:hover { text-decoration: underline; }
+      .shell { width: min(1180px, calc(100% - 36px)); margin: 0 auto; padding: 44px 0 56px; }
+      .hero { display: flex; align-items: flex-end; justify-content: space-between; gap: 28px; margin-bottom: 34px; }
+      .eyebrow { margin: 0 0 9px; color: var(--cyan); font-size: 11px; font-weight: 800; letter-spacing: .2em; text-transform: uppercase; }
+      h1, h2, h3, p { margin-top: 0; }
+      h1 { max-width: 680px; margin-bottom: 12px; font-size: clamp(34px, 6vw, 68px); line-height: .98; letter-spacing: -.055em; }
+      .lede { max-width: 680px; margin-bottom: 0; color: var(--muted); font-size: 17px; }
+      .run-meta { min-width: 210px; padding: 15px 17px; border: 1px solid var(--line); border-radius: 14px; background: rgba(11, 27, 47, .7); color: var(--muted); font-size: 12px; box-shadow: var(--shadow); }
+      .run-meta strong { display: block; margin-top: 4px; color: var(--text); font-size: 14px; }
+
+      .summary { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 42px; }
+      .metric { min-height: 132px; padding: 21px; border: 1px solid var(--line); border-radius: 16px; background: linear-gradient(145deg, rgba(20, 43, 70, .9), rgba(10, 24, 42, .75)); box-shadow: var(--shadow); }
+      .metric-label { color: var(--muted); font-size: 12px; font-weight: 700; letter-spacing: .05em; text-transform: uppercase; }
+      .metric-value { display: block; margin: 10px 0 2px; font-size: 40px; line-height: 1; letter-spacing: -.05em; }
+      .metric-note { color: var(--muted); font-size: 12px; }
+      .metric.pass .metric-value { color: var(--green); }
+      .metric.warning .metric-value { color: var(--amber); }
+      .metric.fail .metric-value { color: var(--red); }
+
+      .section-heading { display: flex; align-items: flex-end; justify-content: space-between; gap: 20px; margin-bottom: 15px; }
+      h2 { margin-bottom: 4px; font-size: 24px; letter-spacing: -.025em; }
+      .section-heading p { margin-bottom: 0; color: var(--muted); }
+      .legend { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 8px; color: var(--muted); font-size: 12px; }
+      .legend span { display: inline-flex; align-items: center; gap: 6px; }
+      .dot { width: 8px; height: 8px; display: inline-block; border-radius: 50%; background: currentColor; }
+
+      .project-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+      .project { position: relative; overflow: hidden; padding: 22px; border: 1px solid var(--line); border-radius: 18px; background: var(--panel); box-shadow: var(--shadow); }
+      .project::before { content: ""; position: absolute; inset: 0 0 auto; height: 3px; background: var(--blue); opacity: .8; }
+      .project.pass::before { background: var(--green); }
+      .project.warning::before { background: var(--amber); }
+      .project.fail::before { background: var(--red); }
+      .project-top { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; margin-bottom: 17px; }
+      .project-name { margin-bottom: 4px; font-size: 22px; letter-spacing: -.03em; }
+      .project-kind { color: var(--muted); font-size: 12px; }
+      .badge { display: inline-flex; align-items: center; gap: 6px; padding: 5px 9px; border: 1px solid currentColor; border-radius: 999px; font-size: 11px; font-weight: 800; white-space: nowrap; }
+      .badge.pass, .check-status.pass { color: var(--green); }
+      .badge.warning, .check-status.warning, .check-status.pending { color: var(--amber); }
+      .badge.fail, .check-status.fail { color: var(--red); }
+      .badge.unknown, .check-status.unknown, .check-status.missing { color: var(--blue); }
+      .project-description { min-height: 48px; margin-bottom: 19px; color: var(--muted); font-size: 13px; }
+      .facts { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-bottom: 20px; }
+      .fact { padding: 11px 12px; border: 1px solid var(--line); border-radius: 11px; background: rgba(7, 17, 31, .45); }
+      .fact-label { display: block; color: var(--muted); font-size: 10px; letter-spacing: .06em; text-transform: uppercase; }
+      .fact-value { display: block; margin-top: 3px; color: var(--text); font-size: 13px; font-weight: 700; }
+      .checks { display: grid; gap: 1px; border-top: 1px solid var(--line); }
+      .check { display: grid; grid-template-columns: 1fr auto; gap: 12px; padding: 11px 0; border-bottom: 1px solid var(--line); }
+      .check-label { font-size: 13px; font-weight: 700; }
+      .check-detail { margin-top: 2px; color: var(--muted); font-size: 12px; }
+      .check-status { align-self: start; font-size: 11px; font-weight: 800; text-transform: uppercase; }
+      .issues { margin: 17px 0 0; padding: 11px 13px 11px 30px; border: 1px solid rgba(245, 199, 107, .24); border-radius: 11px; background: rgba(112, 79, 23, .12); color: var(--amber); font-size: 12px; }
+      .issues li + li { margin-top: 5px; }
+      .project-link { display: inline-block; margin-top: 16px; font-size: 12px; font-weight: 800; }
+      .empty { padding: 30px; border: 1px dashed var(--line); border-radius: 16px; color: var(--muted); text-align: center; }
+      footer { display: flex; justify-content: space-between; gap: 18px; margin-top: 34px; padding-top: 18px; border-top: 1px solid var(--line); color: var(--muted); font-size: 12px; }
+      .error { padding: 18px; border: 1px solid rgba(255, 127, 135, .4); border-radius: 14px; color: var(--red); background: rgba(112, 24, 37, .15); }
+
+      @media (max-width: 800px) {
+        .hero { display: block; }
+        .run-meta { margin-top: 22px; }
+        .summary { grid-template-columns: repeat(2, 1fr); }
+        .project-grid { grid-template-columns: 1fr; }
+        .section-heading { display: block; }
+        .legend { justify-content: flex-start; margin-top: 12px; }
+      }
+      @media (max-width: 460px) {
+        .shell { width: min(100% - 24px, 1180px); padding-top: 28px; }
+        .summary { gap: 8px; }
+        .metric { min-height: 112px; padding: 15px; }
+        .metric-value { font-size: 32px; }
+        .project { padding: 17px; }
+        .facts { grid-template-columns: 1fr; }
+        footer { display: block; }
+        footer span { display: block; margin-top: 5px; }
+      }
+    </style>
+  </head>
+  <body>
+    <main class="shell">
+      <header class="hero">
+        <div>
+          <p class="eyebrow">Project quality / audit console</p>
+          <h1>Calidad que se puede ver.</h1>
+          <p class="lede">Una lectura común de la salud técnica de los proyectos, respetando la arquitectura y las pruebas que necesita cada uno.</p>
+        </div>
+        <div class="run-meta" id="run-meta">Cargando auditoría…</div>
+      </header>
+
+      <section class="summary" id="summary" aria-label="Resumen de calidad"></section>
+
+      <section>
+        <div class="section-heading">
+          <div>
+            <h2>Mapa de proyectos</h2>
+            <p>La evidencia manda: sin evidencia no se inventa un aprobado.</p>
+          </div>
+          <div class="legend" aria-label="Leyenda">
+            <span style="color: var(--green)"><i class="dot"></i>Saludable</span>
+            <span style="color: var(--amber)"><i class="dot"></i>Revisar</span>
+            <span style="color: var(--red)"><i class="dot"></i>Fallo</span>
+          </div>
+        </div>
+        <div class="project-grid" id="projects"></div>
+      </section>
+
+      <footer>
+        <span>Estándar <strong id="standard-release">—</strong></span>
+        <span>Auditoría actual · sin puntuación artificial</span>
+      </footer>
+    </main>
+
+    <script>
+      const statusText = {
+        pass: "Saludable",
+        warning: "Revisar",
+        fail: "Fallo",
+        unknown: "Sin evidencia",
+        pending: "En curso",
+        missing: "Falta",
+        not_applicable: "No aplica"
+      };
+
+      const checkIcons = { pass: "✓", warning: "•", fail: "×", unknown: "?", pending: "…", missing: "!", not_applicable: "—" };
+
+      function escapeHtml(value) {
+        return String(value ?? "").replace(/[&<>'"]/g, (character) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", "'": "&#39;", '"': "&quot;" }[character]));
+      }
+
+      function formatDate(value) {
+        if (!value) return "sin fecha";
+        return new Intl.DateTimeFormat("es-ES", { dateStyle: "medium", timeStyle: "short" }).format(new Date(value));
+      }
+
+      function statusLabel(status) { return statusText[status] || statusText.unknown; }
+
+      function renderSummary(summary) {
+        const items = [
+          ["Saludables", summary.pass, "pass", "evidencia completa"],
+          ["Para revisar", summary.warning, "warning", "acceso o señales pendientes"],
+          ["Con fallo", summary.fail, "fail", "requieren intervención"],
+          ["Protegidos", summary.protectedMain, "", `de ${summary.total} repositorios`]
+        ];
+        document.getElementById("summary").innerHTML = items.map(([label, value, tone, note]) => `
+          <article class="metric ${tone}">
+            <span class="metric-label">${escapeHtml(label)}</span>
+            <strong class="metric-value">${escapeHtml(value)}</strong>
+            <span class="metric-note">${escapeHtml(note)}</span>
+          </article>`).join("");
+      }
+
+      function renderCheck(check) {
+        const status = check.status || "unknown";
+        const evidence = check.evidenceUrl ? ` <a href="${escapeHtml(check.evidenceUrl)}" target="_blank" rel="noreferrer">ver evidencia</a>` : "";
+        return `<div class="check">
+          <div><div class="check-label">${escapeHtml(check.label)}</div><div class="check-detail">${escapeHtml(check.detail)}${evidence}</div></div>
+          <div class="check-status ${escapeHtml(status)}">${escapeHtml(checkIcons[status] || "?")} ${escapeHtml(statusLabel(status))}</div>
+        </div>`;
+      }
+
+      function renderRepository(report) {
+        const status = report.overall || "unknown";
+        const run = report.qualityRun || {};
+        const workflow = report.workflow || {};
+        const ruleset = report.governance?.ruleset || {};
+        const visibility = report.repository.visibility === "private" ? "Privado" : "Público";
+        const link = report.repository.url ? `<a class="project-link" href="${escapeHtml(report.repository.url)}" target="_blank" rel="noreferrer">Abrir repositorio →</a>` : "";
+        const issues = (report.issues || []).length ? `<ul class="issues">${report.issues.map((issue) => `<li>${escapeHtml(issue)}</li>`).join("")}</ul>` : "";
+        return `<article class="project ${escapeHtml(status)}">
+          <div class="project-top">
+            <div><h3 class="project-name">${escapeHtml(report.profile.label)}</h3><div class="project-kind">${escapeHtml(report.profile.kind)} · ${escapeHtml(visibility)}</div></div>
+            <span class="badge ${escapeHtml(status)}">${escapeHtml(statusLabel(status))}</span>
+          </div>
+          <p class="project-description">${escapeHtml(report.profile.description)}</p>
+          <div class="facts">
+            <div class="fact"><span class="fact-label">Main</span><span class="fact-value">${ruleset.status === "pass" ? "Protegida" : "Revisar"}</span></div>
+            <div class="fact"><span class="fact-label">Workflow</span><span class="fact-value">${workflow.status === "pass" ? "Fijado" : statusLabel(workflow.status)}</span></div>
+            <div class="fact"><span class="fact-label">Última run</span><span class="fact-value">${statusLabel(run.status)}</span></div>
+          </div>
+          <div class="checks">${(report.checks || []).map(renderCheck).join("")}</div>
+          ${issues}
+          ${link}
+        </article>`;
+      }
+
+      async function loadDashboard() {
+        try {
+          const response = await fetch("./data.json", { cache: "no-store" });
+          if (!response.ok) throw new Error(`HTTP ${response.status}`);
+          const data = await response.json();
+          renderSummary(data.summary);
+          document.getElementById("projects").innerHTML = data.repositories.map(renderRepository).join("");
+          document.getElementById("standard-release").textContent = data.source?.standardRelease || "sin versión";
+          document.getElementById("run-meta").innerHTML = `Última auditoría<strong>${escapeHtml(formatDate(data.generatedAt))}</strong><span>${escapeHtml(data.summary.total)} repositorios · ${escapeHtml(data.summary.qualityGreen)} checks verdes</span>`;
+        } catch (error) {
+          document.getElementById("projects").innerHTML = `<div class="error">No se pudo cargar la auditoría. Ejecuta el workflow de calidad para generar <code>data.json</code>.</div>`;
+          document.getElementById("run-meta").textContent = "Auditoría no disponible";
+        }
+      }
+
+      loadDashboard();
+    </script>
+  </body>
+</html>
