@@ -126,7 +126,7 @@ jobs:
         run: ${{ inputs.coverage-command }}
 
       - name: Install E2E dependencies
-        id: e2e-install
+        id: e2e_install
         if: ${{ inputs.e2e-install-command != '' }}
         run: ${{ inputs.e2e-install-command }}
 
@@ -186,7 +186,7 @@ jobs:
           QUALITY_GATE_STATUS_BUILD: ${{ steps.build.outcome || 'unknown' }}
           QUALITY_GATE_STATUS_TESTS: ${{ steps.tests.outcome || 'unknown' }}
           QUALITY_GATE_STATUS_COVERAGE: ${{ steps.coverage.outcome || 'unknown' }}
-          QUALITY_GATE_STATUS_E2E_INSTALL: ${{ steps.e2e-install.outcome || 'unknown' }}
+          QUALITY_GATE_STATUS_E2E_INSTALL: ${{ steps.e2e_install.outcome || 'unknown' }}
           QUALITY_GATE_STATUS_E2E: ${{ steps.e2e.outcome || 'unknown' }}
           QUALITY_GATE_STATUS_SMOKE: ${{ steps.smoke.outcome || 'unknown' }}
           QUALITY_GATE_STATUS_METRICS: ${{ steps.metrics.outcome || 'unknown' }}
