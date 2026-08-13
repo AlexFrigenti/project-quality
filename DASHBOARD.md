@@ -20,9 +20,19 @@ El workflow `.github/workflows/quality-dashboard.yml` ejecuta una matriz de cuat
 
 Los proyectos no comparten arquitectura, dependencias ni una lista artificial de checks. `No aplica` no se convierte en fallo y la ausencia de evidencia se muestra como revisión pendiente.
 
+Además del proceso, el dashboard consume el artifact real `quality-metrics` de cada workflow. Solo acepta una ejecución completada cuyo SHA coincida exactamente con el HEAD de `main`. El informe se valida contra el contrato, se reduce a campos seguros y se incorpora como:
+
+- conclusión real del workflow;
+- gates con applicability y status;
+- métricas numéricas disponibles;
+- commit y fecha de validación;
+- enlace a la ejecución cuando el repositorio es público.
+
+Si todavía no existe evidencia para ese commit, el panel muestra `Evidencia pendiente para el commit actual`. Eso no se interpreta automáticamente como un fallo de calidad.
+
 ## Acceso al repositorio privado
 
-`gestor-autonomo` y `Nexo` son privados. Para auditarlos completamente hay que crear en `project-quality` un secreto de Actions llamado `QUALITY_AUDIT_TOKEN` con un token fine-grained de solo lectura y alcance limitado a los repositorios necesarios. Sin ese secreto, el dashboard muestra esos repositorios como `Revisar` y no expone enlaces ni contenido privado.
+`gestor-autonomo` y `Nexo` son privados. Para auditarlos completamente hay que configurar en `project-quality` un secreto de Actions con un token fine-grained de solo lectura y alcance limitado a los repositorios necesarios. Sin esas credenciales, el dashboard muestra esos repositorios como `Revisar` y no expone enlaces ni contenido privado.
 
 En ejecuciones de Pull Request no se usa ese secreto: el workflow usa el token efímero de GitHub para no entregar credenciales privadas a código de una rama no confiable.
 
@@ -38,4 +48,4 @@ El dashboard no tiene backend, base de datos ni proveedor externo. Solo contiene
 
 ## Estado actual y evolución
 
-La primera versión muestra una instantánea verificable. No calcula una nota global ni guarda tendencias históricas. En una iteración posterior se puede añadir histórico de ejecuciones o evolución temporal, siempre que las métricas sigan teniendo evidencia y significado para cada proyecto.
+La versión actual combina la auditoría de proceso con la evidencia del commit actual. No calcula una nota global ni porcentajes artificiales. La siguiente iteración puede guardar snapshots sanitizados por commit validado de `main` para construir evolución histórica, siempre que las métricas sigan teniendo evidencia y significado para cada proyecto.

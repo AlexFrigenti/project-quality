@@ -7,6 +7,8 @@ Este repositorio no contiene código de una aplicación concreta. Contiene regla
 ## Qué contiene
 
 - [QUALITY_STANDARD.md](QUALITY_STANDARD.md): contrato común de calidad.
+- [QUALITY_METRICS.md](QUALITY_METRICS.md): contrato de evidencia estructurada producido por los workflows.
+- [DASHBOARD.md](DASHBOARD.md): auditoría de proceso y evidencia real en GitHub Pages.
 - [CONTRIBUTING.md](CONTRIBUTING.md): flujo de trabajo para cambios y Pull Requests.
 - [AGENTS.md](AGENTS.md): instrucciones para agentes de IA que trabajen en los repositorios.
 - [.github/pull_request_template.md](.github/pull_request_template.md): checklist común de revisión.

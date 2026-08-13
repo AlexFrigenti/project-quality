@@ -91,6 +91,34 @@
       footer { display: flex; justify-content: space-between; gap: 18px; margin-top: 34px; padding-top: 18px; border-top: 1px solid var(--line); color: var(--muted); font-size: 12px; }
       .error { padding: 18px; border: 1px solid rgba(255, 127, 135, .4); border-radius: 14px; color: var(--red); background: rgba(112, 24, 37, .15); }
 
+      .evidence-details { margin-top: 18px; border-top: 1px solid var(--line); }
+      .evidence-details summary { padding: 14px 0; color: var(--cyan); cursor: pointer; font-size: 12px; font-weight: 800; list-style: none; }
+      .evidence-details summary::-webkit-details-marker { display: none; }
+      .evidence-details summary::before { content: "＋"; display: inline-block; margin-right: 7px; color: var(--cyan); }
+      .evidence-details[open] summary::before { content: "−"; }
+      .evidence-box { padding: 14px; border: 1px solid var(--line); border-radius: 12px; background: rgba(7, 17, 31, .42); }
+      .evidence-box.pending, .evidence-box.unknown { border-color: rgba(245, 199, 107, .3); }
+      .evidence-box.fail { border-color: rgba(255, 127, 135, .35); }
+      .evidence-head { display: flex; justify-content: space-between; gap: 12px; margin-bottom: 12px; }
+      .evidence-title { font-size: 13px; font-weight: 800; }
+      .evidence-meta { color: var(--muted); font-size: 11px; }
+      .quality-gates { display: grid; gap: 6px; }
+      .quality-gate { display: grid; grid-template-columns: 1fr auto; gap: 10px; padding: 8px 0; border-top: 1px solid var(--line); }
+      .quality-gate-main { min-width: 0; }
+      .quality-gate-label { display: block; font-size: 12px; font-weight: 700; }
+      .quality-gate-meta { display: block; margin-top: 1px; color: var(--muted); font-size: 11px; }
+      .quality-gate-status { align-self: start; font-size: 10px; font-weight: 800; text-transform: uppercase; }
+      .quality-gate-status.pass { color: var(--green); }
+      .quality-gate-status.warning { color: var(--amber); }
+      .quality-gate-status.fail { color: var(--red); }
+      .quality-gate-status.unknown, .quality-gate-status.not-applicable { color: var(--blue); }
+      .evidence-subheading { margin: 15px 0 7px; color: var(--muted); font-size: 10px; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; }
+      .metric-list, .not-applicable-list { display: flex; flex-wrap: wrap; gap: 7px; margin: 0; padding: 0; list-style: none; }
+      .metric-item, .not-applicable-item { padding: 6px 8px; border: 1px solid var(--line); border-radius: 8px; color: var(--text); background: rgba(16, 36, 61, .55); font-size: 11px; }
+      .metric-item strong { color: var(--cyan); }
+      .not-applicable-item { color: var(--muted); }
+      .evidence-note { margin: 0; color: var(--muted); font-size: 11px; }
+
       @media (max-width: 800px) {
         .hero { display: block; }
         .run-meta { margin-top: 22px; }
@@ -157,6 +185,38 @@
       };
 
       const checkIcons = { pass: "✓", warning: "•", fail: "×", unknown: "?", pending: "…", missing: "!", not_applicable: "—" };
+      const qualityStatusText = { passed: "Correcto", failed: "Fallo", skipped: "Omitido", "not-applicable": "No aplica", unknown: "Sin evidencia" };
+      const qualityStatusIcons = { passed: "✓", failed: "×", skipped: "•", "not-applicable": "—", unknown: "?" };
+
+      function qualityStatusLabel(status) { return qualityStatusText[status] || qualityStatusText.unknown; }
+      function qualityStatusClass(status) {
+        if (status === "passed") return "pass";
+        if (status === "failed") return "fail";
+        if (status === "skipped") return "warning";
+        if (status === "not-applicable") return "not-applicable";
+        return "unknown";
+      }
+
+      function shortSha(value) {
+        return value ? String(value).slice(0, 12) + "…" : "sin SHA";
+      }
+
+      function flattenMetrics(value, prefix = "") {
+        if (typeof value === "number") return [[prefix, value]];
+        if (!value || typeof value !== "object" || Array.isArray(value)) return [];
+        return Object.entries(value).flatMap(([key, child]) =>
+          flattenMetrics(child, prefix ? prefix + "." + key : key)
+        );
+      }
+
+      function metricLabel(path) {
+        return path.split(".").map((part) => part.replace(/[-_]/g, " ")).join(" · ");
+      }
+
+      function formatMetric(path, value) {
+        const suffix = /coverage/i.test(path) ? "%" : "";
+        return String(value) + suffix;
+      }
 
       function escapeHtml(value) {
         return String(value ?? "").replace(/[&<>'"]/g, (character) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", "'": "&#39;", '"': "&quot;" }[character]));
@@ -193,29 +253,92 @@
         </div>`;
       }
 
+
+      function renderQualityEvidence(report) {
+        const evidence = report.qualityEvidence || {};
+        const currentSha = evidence.currentCommitSha || report.repository?.headSha;
+        if (evidence.status !== "current" || !evidence.summary) {
+          const tone = evidence.status === "pending" ? "pending" : "unknown";
+          return [
+            '<div class="evidence-details">',
+            '<div class="evidence-box ' + tone + '">',
+            '<div class="evidence-title">' + escapeHtml(evidence.message || "Evidencia no disponible.") + '</div>',
+            '<p class="evidence-note">Commit actual: <code>' + escapeHtml(shortSha(currentSha)) + '</code></p>',
+            '</div>',
+            '</div>'
+          ].join("");
+        }
+
+        const summary = evidence.summary;
+        const run = summary.run || {};
+        const gates = (summary.gates || []).map((gate) => {
+          const tone = qualityStatusClass(gate.status);
+          const applicability = gate.applicability === "not-applicable" ? "No aplica" : gate.applicability === "optional" ? "Opcional" : "Obligatorio";
+          return [
+            '<div class="quality-gate">',
+            '<div class="quality-gate-main"><span class="quality-gate-label">' + escapeHtml(gate.label) + '</span>',
+            '<span class="quality-gate-meta">' + escapeHtml(applicability) + ' · ' + escapeHtml(gate.details) + '</span></div>',
+            '<span class="quality-gate-status ' + tone + '">' + escapeHtml(qualityStatusIcons[gate.status] || "?") + ' ' + escapeHtml(qualityStatusLabel(gate.status)) + '</span>',
+            '</div>'
+          ].join("");
+        }).join("");
+
+        const metrics = flattenMetrics(summary.metrics || {});
+        const metricsHtml = metrics.length
+          ? '<ul class="metric-list">' + metrics.map(([path, value]) => '<li class="metric-item">' + escapeHtml(metricLabel(path)) + ': <strong>' + escapeHtml(formatMetric(path, value)) + '</strong></li>').join("") + '</ul>'
+          : '<p class="evidence-note">No hay métricas numéricas publicadas para este perfil.</p>';
+
+        const notApplicable = (report.profile?.notApplicableAreas || []);
+        const notApplicableHtml = notApplicable.length
+          ? '<ul class="not-applicable-list">' + notApplicable.map((item) => '<li class="not-applicable-item">' + escapeHtml(item) + ' · No aplica</li>').join("") + '</ul>'
+          : '';
+
+        const runLink = report.qualityRun?.url
+          ? ' · <a href="' + escapeHtml(report.qualityRun.url) + '" target="_blank" rel="noreferrer">abrir ejecución</a>'
+          : '';
+        return [
+          '<details class="evidence-details">',
+          '<summary>Evidencia real · gates y métricas</summary>',
+          '<div class="evidence-box ' + qualityStatusClass(summary.conclusion === "passed" ? "passed" : summary.conclusion === "failed" ? "failed" : "unknown") + '">',
+          '<div class="evidence-head"><div><div class="evidence-title">Commit validado <code>' + escapeHtml(shortSha(evidence.validatedCommitSha)) + '</code></div>',
+          '<div class="evidence-meta">' + escapeHtml(formatDate(run.completedAt)) + runLink + '</div></div>',
+          '<span class="quality-gate-status ' + qualityStatusClass(summary.conclusion === "passed" ? "passed" : summary.conclusion === "failed" ? "failed" : "unknown") + '">' + escapeHtml(qualityStatusLabel(summary.conclusion === "passed" ? "passed" : summary.conclusion === "failed" ? "failed" : "unknown")) + '</span></div>',
+          '<div class="evidence-subheading">Gates de calidad</div>',
+          '<div class="quality-gates">' + gates + '</div>',
+          '<div class="evidence-subheading">Métricas cuantificables</div>',
+          metricsHtml,
+          notApplicableHtml ? '<div class="evidence-subheading">No aplica por perfil</div>' + notApplicableHtml : '',
+          '</div>',
+          '</details>'
+        ].join("");
+      }
+
       function renderRepository(report) {
         const status = report.overall || "unknown";
         const run = report.qualityRun || {};
+        const evidence = report.qualityEvidence || {};
         const workflow = report.workflow || {};
         const ruleset = report.governance?.ruleset || {};
         const visibility = report.repository.visibility === "private" ? "Privado" : "Público";
-        const link = report.repository.url ? `<a class="project-link" href="${escapeHtml(report.repository.url)}" target="_blank" rel="noreferrer">Abrir repositorio →</a>` : "";
-        const issues = (report.issues || []).length ? `<ul class="issues">${report.issues.map((issue) => `<li>${escapeHtml(issue)}</li>`).join("")}</ul>` : "";
-        return `<article class="project ${escapeHtml(status)}">
-          <div class="project-top">
-            <div><h3 class="project-name">${escapeHtml(report.profile.label)}</h3><div class="project-kind">${escapeHtml(report.profile.kind)} · ${escapeHtml(visibility)}</div></div>
-            <span class="badge ${escapeHtml(status)}">${escapeHtml(statusLabel(status))}</span>
-          </div>
-          <p class="project-description">${escapeHtml(report.profile.description)}</p>
-          <div class="facts">
-            <div class="fact"><span class="fact-label">Main</span><span class="fact-value">${ruleset.status === "pass" ? "Protegida" : "Revisar"}</span></div>
-            <div class="fact"><span class="fact-label">Workflow</span><span class="fact-value">${workflow.status === "pass" ? "Fijado" : statusLabel(workflow.status)}</span></div>
-            <div class="fact"><span class="fact-label">Última run</span><span class="fact-value">${statusLabel(run.status)}</span></div>
-          </div>
-          <div class="checks">${(report.checks || []).map(renderCheck).join("")}</div>
-          ${issues}
-          ${link}
-        </article>`;
+        const link = report.repository.url ? '<a class="project-link" href="' + escapeHtml(report.repository.url) + '" target="_blank" rel="noreferrer">Abrir repositorio →</a>' : "";
+        const issues = (report.issues || []).length ? '<ul class="issues">' + report.issues.map((issue) => '<li>' + escapeHtml(issue) + '</li>').join("") + '</ul>' : "";
+        const latestRun = evidence.status === "current" ? statusLabel(run.status) : evidence.status === "pending" ? "Pendiente" : "Sin evidencia";
+        return [
+          '<article class="project ' + escapeHtml(status) + '">',
+          '<div class="project-top"><div><h3 class="project-name">' + escapeHtml(report.profile.label) + '</h3><div class="project-kind">' + escapeHtml(report.profile.kind) + ' · ' + escapeHtml(visibility) + '</div></div>',
+          '<span class="badge ' + escapeHtml(status) + '">' + escapeHtml(statusLabel(status)) + '</span></div>',
+          '<p class="project-description">' + escapeHtml(report.profile.description) + '</p>',
+          '<div class="facts">',
+          '<div class="fact"><span class="fact-label">Main</span><span class="fact-value">' + (ruleset.status === "pass" ? "Protegida" : "Revisar") + '</span></div>',
+          '<div class="fact"><span class="fact-label">Workflow</span><span class="fact-value">' + (workflow.status === "pass" ? "Fijado" : statusLabel(workflow.status)) + '</span></div>',
+          '<div class="fact"><span class="fact-label">Evidencia</span><span class="fact-value">' + escapeHtml(latestRun) + '</span></div>',
+          '</div>',
+          '<div class="checks">' + (report.checks || []).map(renderCheck).join("") + '</div>',
+          renderQualityEvidence(report),
+          issues,
+          link,
+          '</article>'
+        ].join("");
       }
 
       async function loadDashboard() {

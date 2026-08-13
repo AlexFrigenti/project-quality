@@ -1,4 +1,5 @@
 import { writeFile } from "node:fs/promises";
+import { collectQualityEvidence } from "./collect-quality-evidence.mjs";
 
 const API_ROOT = "https://api.github.com";
 const repository = process.env.AUDIT_REPOSITORY;
@@ -143,13 +144,15 @@ const report = {
     visibility,
     access: "available",
     defaultBranch: null,
-    url: publicUrl
+    url: publicUrl,
+    headSha: null
   },
   profile: {
     id: profileId,
     label: profile.label,
     kind: profile.kind,
-    description: profile.description
+    description: profile.description,
+    notApplicableAreas: profile.notApplicableAreas || []
   },
   governance: { ruleset: null },
   workflow: {
@@ -164,7 +167,16 @@ const report = {
     status: "unknown",
     conclusion: null,
     createdAt: null,
-    url: null
+    url: null,
+    headSha: null
+  },
+  qualityEvidence: {
+    status: "unavailable",
+    message: "Evidencia no disponible.",
+    currentCommitSha: null,
+    validatedCommitSha: null,
+    artifact: null,
+    summary: null
   },
   checks: [],
   issues: [],
@@ -176,7 +188,7 @@ if (!repoResponse.ok) {
   report.repository.access = "required";
   report.overall = "warning";
   const message = repoResponse.status === 404
-    ? "Repositorio no accesible con las credenciales disponibles; se necesita QUALITY_AUDIT_TOKEN para auditarlo."
+    ? "No hay credenciales de lectura disponibles para auditar este repositorio."
     : `GitHub no pudo leer el repositorio (HTTP ${repoResponse.status || "red"}).`;
   addIssue(report, message);
   addCheck(report, "access", "Acceso al repositorio", "warning", message);
@@ -186,6 +198,10 @@ if (!repoResponse.ok) {
 
 const repo = repoResponse.data;
 report.repository.defaultBranch = repo.default_branch || null;
+const defaultBranch = repo.default_branch || "main";
+const branchRefResponse = await request(`/repos/${repository}/git/ref/heads/${encodePath(defaultBranch)}`);
+const currentCommitSha = branchRefResponse.ok ? branchRefResponse.data?.object?.sha || null : null;
+report.repository.headSha = currentCommitSha;
 report.repository.visibility = repo.visibility || visibility;
 if (report.repository.visibility === "private") {
   publicUrl = null;
@@ -273,22 +289,41 @@ if (!workflowResponse.ok || !workflowResponse.data?.content) {
 }
 
 const workflowFile = profile.workflowPath.split("/").at(-1);
-const runsPath = `/repos/${repository}/actions/workflows/${encodeURIComponent(workflowFile)}/runs?branch=${encodeURIComponent(repo.default_branch || "main")}&per_page=1`;
-const runsResponse = await request(runsPath);
-if (runsResponse.ok) {
-  const run = runsResponse.data?.workflow_runs?.[0] || null;
-  const normalized = normalizeRunStatus(run);
-  report.qualityRun.status = normalized.status;
-  report.qualityRun.conclusion = run?.conclusion || null;
-  report.qualityRun.createdAt = run?.created_at || null;
-  report.qualityRun.url = publicUrl && run?.html_url ? run.html_url : null;
-  addCheck(report, "latest-quality-run", "Última validación", normalized.status, run ? `${normalized.label} en ${run.head_branch || repo.default_branch}.` : normalized.label, report.qualityRun.url);
-  if (["fail", "missing", "unknown"].includes(normalized.status)) addIssue(report, `La última ejecución de calidad no está verde: ${normalized.label}.`);
+const qualityEvidence = await collectQualityEvidence({
+  repository,
+  defaultBranch,
+  currentCommitSha,
+  workflowFile,
+  exposeLinks: report.repository.visibility !== "private"
+});
+report.qualityEvidence = qualityEvidence;
+
+if (qualityEvidence.status === "current" && qualityEvidence.summary) {
+  const conclusion = qualityEvidence.summary.conclusion;
+  const status = conclusion === "passed" ? "pass" : conclusion === "failed" ? "fail" : "unknown";
+  const run = qualityEvidence.summary.run;
+  const detail = "Evidencia correspondiente al commit " + qualityEvidence.validatedCommitSha.slice(0, 12) + "…. Conclusión: " + conclusion + ".";
+  report.qualityRun = {
+    status,
+    conclusion,
+    createdAt: run.completedAt,
+    url: publicUrl ? run.url : null,
+    headSha: qualityEvidence.validatedCommitSha
+  };
+  addCheck(report, "latest-quality-run", "Última validación", status, detail, publicUrl ? run.url : null);
+  if (status === "fail") addIssue(report, "La evidencia de calidad del commit actual contiene gates fallidos.");
+  if (status === "unknown") addIssue(report, "La evidencia de calidad del commit actual no tiene una conclusión determinista.");
 } else {
-  const detail = `No se pudo consultar el historial de Actions (HTTP ${runsResponse.status || "red"}).`;
-  report.qualityRun.status = "unknown";
-  addCheck(report, "latest-quality-run", "Última validación", "unknown", detail);
-  addIssue(report, detail);
+  const status = qualityEvidence.status === "pending" ? "pending" : "unknown";
+  report.qualityRun = {
+    status,
+    conclusion: null,
+    createdAt: null,
+    url: null,
+    headSha: null
+  };
+  addCheck(report, "latest-quality-run", "Última validación", status, qualityEvidence.message);
+  if (qualityEvidence.status === "unavailable") addIssue(report, qualityEvidence.message);
 }
 
 report.overall = overallStatus(report);
