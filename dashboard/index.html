@@ -87,6 +87,7 @@
       .issues { margin: 17px 0 0; padding: 11px 13px 11px 30px; border: 1px solid rgba(245, 199, 107, .24); border-radius: 11px; background: rgba(112, 79, 23, .12); color: var(--amber); font-size: 12px; }
       .issues li + li { margin-top: 5px; }
       .project-link { display: inline-block; margin-top: 16px; font-size: 12px; font-weight: 800; }
+      .project-actions { display: flex; flex-wrap: wrap; gap: 14px; align-items: center; }
       .empty { padding: 30px; border: 1px dashed var(--line); border-radius: 16px; color: var(--muted); text-align: center; }
       footer { display: flex; justify-content: space-between; gap: 18px; margin-top: 34px; padding-top: 18px; border-top: 1px solid var(--line); color: var(--muted); font-size: 12px; }
       .error { padding: 18px; border: 1px solid rgba(255, 127, 135, .4); border-radius: 14px; color: var(--red); background: rgba(112, 24, 37, .15); }
@@ -169,7 +170,7 @@
 
       <footer>
         <span>Estándar <strong id="standard-release">—</strong></span>
-        <span>Auditoría actual · sin puntuación artificial</span>
+        <span>Auditoría actual · sin puntuación artificial · <a href="./history.html">Evolución histórica →</a></span>
       </footer>
     </main>
 
@@ -321,6 +322,7 @@
         const ruleset = report.governance?.ruleset || {};
         const visibility = report.repository.visibility === "private" ? "Privado" : "Público";
         const link = report.repository.url ? '<a class="project-link" href="' + escapeHtml(report.repository.url) + '" target="_blank" rel="noreferrer">Abrir repositorio →</a>' : "";
+        const historyLink = '<a class="project-link" href="./history.html?project=' + encodeURIComponent(report.repository.id) + '">Ver evolución →</a>';
         const issues = (report.issues || []).length ? '<ul class="issues">' + report.issues.map((issue) => '<li>' + escapeHtml(issue) + '</li>').join("") + '</ul>' : "";
         const latestRun = evidence.status === "current" ? statusLabel(run.status) : evidence.status === "pending" ? "Pendiente" : "Sin evidencia";
         return [
@@ -336,7 +338,7 @@
           '<div class="checks">' + (report.checks || []).map(renderCheck).join("") + '</div>',
           renderQualityEvidence(report),
           issues,
-          link,
+          '<div class="project-actions">' + historyLink + link + '</div>',
           '</article>'
         ].join("");
       }
