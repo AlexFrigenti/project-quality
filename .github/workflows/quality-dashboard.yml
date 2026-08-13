@@ -119,6 +119,9 @@ jobs:
       - name: Validate collector
         run: node scripts/test-quality-evidence.mjs
 
+      - name: Validate quality history contract
+        run: node scripts/test-quality-history.mjs
+
       - name: Download audit reports
         uses: actions/download-artifact@v4
         with:
