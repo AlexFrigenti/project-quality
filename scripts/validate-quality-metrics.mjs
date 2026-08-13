@@ -5,6 +5,7 @@ import { resolve } from "node:path";
 const APPLICABILITIES = new Set(["required", "optional", "not-applicable"]);
 const STATUSES = new Set(["passed", "failed", "skipped", "not-applicable", "unknown"]);
 const CONCLUSIONS = new Set(["passed", "failed", "unknown"]);
+const EVIDENCE_KINDS = new Set(["workflow-run", "workflow-step", "artifact", "repository"]);
 const TOKEN_PATTERN = /(gh[pousr]_[A-Za-z0-9_]+|github_pat_[A-Za-z0-9_]+|Bearer\s+[A-Za-z0-9._-]+)/i;
 
 function fail(message) {
@@ -46,6 +47,7 @@ function ensureUrl(value, path) {
 function ensureEvidence(value, path) {
   ensureObject(value, path);
   ensureText(value.kind, path + ".kind");
+  if (!EVIDENCE_KINDS.has(value.kind)) fail(path + ".kind no es válido");
   ensureText(value.label, path + ".label");
   ensureUrl(value.url, path + ".url");
 }
@@ -65,7 +67,7 @@ function ensureMetricValue(value, path) {
   const entries = Object.entries(value);
   if (entries.length === 0) fail(path + " no puede estar vacío");
   for (const [key, child] of entries) {
-    ensureText(key, path + ".key");
+    if (!/^[a-zA-Z][a-zA-Z0-9_-]*$/.test(key)) fail(path + "." + key + " no es válido");
     ensureMetricValue(child, path + "." + key);
   }
 }
@@ -123,6 +125,12 @@ export function validateQualityMetrics(report) {
     ensureText(gate.label, path + ".label");
     if (!APPLICABILITIES.has(gate.applicability)) fail(path + ".applicability no es válido");
     if (!STATUSES.has(gate.status)) fail(path + ".status no es válido");
+    if (gate.applicability === "not-applicable" && gate.status !== "not-applicable") {
+      fail(path + " debe usar status not-applicable cuando no aplica");
+    }
+    if (gate.applicability !== "not-applicable" && gate.status === "not-applicable") {
+      fail(path + " no puede usar status not-applicable si aplica");
+    }
     ensureText(gate.details, path + ".details");
     ensureEvidenceList(gate.evidence, path + ".evidence");
   });
