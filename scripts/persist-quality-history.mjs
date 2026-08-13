@@ -85,8 +85,12 @@ function normalizeQuality(report) {
     const headSha = requireSha(report.repository?.headSha, report.repository?.id + ".repository.headSha");
     const validatedSha = requireSha(evidence.validatedCommitSha, report.repository?.id + ".qualityEvidence.validatedCommitSha");
     const summary = evidence.summary;
-    if (!summary || validatedSha !== headSha || summary.commit?.sha !== headSha) {
+    if (!summary || evidence.currentCommitSha !== headSha || validatedSha !== headSha || summary.commit?.sha !== headSha) {
       throw new Error("La evidencia no coincide exactamente con el HEAD de " + report.repository?.id + ".");
+    }
+    const defaultBranch = report.repository?.defaultBranch || "main";
+    if (summary.commit?.branch !== defaultBranch) {
+      throw new Error("La evidencia no pertenece a la rama estable de " + report.repository?.id + ".");
     }
     if (!summary.run?.completedAt || Number.isNaN(Date.parse(summary.run.completedAt))) {
       throw new Error("La evidencia no contiene una fecha válida en " + report.repository?.id + ".");
@@ -97,7 +101,10 @@ function normalizeQuality(report) {
     base.commitSha = headSha;
     base.validatedAt = summary.run.completedAt;
     base.conclusion = summary.conclusion;
-    base.gates = (summary.gates || []).map((gate) => ({
+    if (!Array.isArray(summary.gates) || summary.gates.length === 0) {
+      throw new Error("La evidencia no contiene gates en " + report.repository?.id + ".");
+    }
+    base.gates = summary.gates.map((gate) => ({
       id: boundedText(gate.id, 80),
       label: boundedText(gate.label, 160),
       applicability: gate.applicability,
