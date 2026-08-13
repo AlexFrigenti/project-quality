@@ -3,6 +3,14 @@ name: Reusable static quality
 on:
   workflow_call:
     inputs:
+      standard-version:
+        description: Published quality standard version used by this report
+        required: true
+        type: string
+      standard-sha:
+        description: Immutable commit SHA of the quality standard used by this report
+        required: true
+        type: string
       node-version:
         description: Node.js version used by the validation scripts
         required: false
@@ -17,6 +25,16 @@ on:
         required: false
         type: string
         default: ""
+      metrics-command:
+        description: Optional command that writes numeric metrics JSON
+        required: false
+        type: string
+        default: ""
+      metrics-file:
+        description: Path to the numeric metrics JSON written by metrics-command
+        required: false
+        type: string
+        default: ".quality/metrics.json"
 
 jobs:
   quality:
@@ -36,8 +54,62 @@ jobs:
           node-version: ${{ inputs.node-version }}
 
       - name: Deterministic static validation
+        id: validation
         run: ${{ inputs.validation-command }}
 
       - name: Smoke test
+        id: smoke
         if: ${{ inputs.smoke-command != '' }}
         run: ${{ inputs.smoke-command }}
+
+
+      - name: Additional metrics
+        id: metrics
+        if: ${{ always() && inputs.metrics-command != '' }}
+        run: ${{ inputs.metrics-command }}
+
+      - name: Checkout quality standard support
+        if: ${{ always() }}
+        uses: actions/checkout@v4
+        with:
+          repository: AlexFrigenti/project-quality
+          ref: ${{ inputs.standard-sha }}
+          path: .quality-standard
+          fetch-depth: 1
+          sparse-checkout: |
+            schemas/quality-metrics.schema.json
+            scripts/generate-quality-metrics.mjs
+            scripts/validate-quality-metrics.mjs
+
+      - name: Generate quality metrics
+        if: ${{ always() }}
+        env:
+          QUALITY_PROJECT_ID: ${{ github.event.repository.name }}
+          QUALITY_PROJECT_NAME: ${{ github.event.repository.name }}
+          QUALITY_PROJECT_KIND: static
+          QUALITY_STANDARD_VERSION: ${{ inputs.standard-version }}
+          QUALITY_STANDARD_SHA: ${{ inputs.standard-sha }}
+          QUALITY_GATE_IDS: validation smoke metrics
+          QUALITY_GATE_APPLICABILITY_VALIDATION: required
+          QUALITY_GATE_APPLICABILITY_SMOKE: ${{ inputs.smoke-command != '' && 'required' || 'not-applicable' }}
+          QUALITY_GATE_APPLICABILITY_METRICS: ${{ inputs.metrics-command != '' && 'required' || 'not-applicable' }}
+          QUALITY_GATE_STATUS_VALIDATION: ${{ steps.validation.outcome || 'unknown' }}
+          QUALITY_GATE_STATUS_SMOKE: ${{ steps.smoke.outcome || 'unknown' }}
+          QUALITY_GATE_STATUS_METRICS: ${{ steps.metrics.outcome || 'unknown' }}
+          QUALITY_METRICS_FILE: ${{ inputs.metrics-command != '' && inputs.metrics-file || '' }}
+          QUALITY_METRICS_FILE_REQUIRED: ${{ inputs.metrics-command != '' }}
+          QUALITY_RUN_STARTED_AT: ${{ github.run_started_at }}
+          QUALITY_METRICS_OUTPUT: quality-metrics.json
+        run: node .quality-standard/scripts/generate-quality-metrics.mjs
+
+      - name: Validate quality metrics
+        if: ${{ always() }}
+        run: node .quality-standard/scripts/validate-quality-metrics.mjs quality-metrics.json
+
+      - name: Upload quality metrics
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: quality-metrics
+          path: quality-metrics.json
+          if-no-files-found: error

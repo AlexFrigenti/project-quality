@@ -3,6 +3,14 @@ name: Reusable Node.js quality
 on:
   workflow_call:
     inputs:
+      standard-version:
+        description: Published quality standard version used by this report
+        required: true
+        type: string
+      standard-sha:
+        description: Immutable commit SHA of the quality standard used by this report
+        required: true
+        type: string
       node-version:
         description: Node.js version used by the project
         required: false
@@ -55,6 +63,16 @@ on:
         required: false
         type: string
         default: ""
+      metrics-command:
+        description: Optional command that writes numeric metrics JSON
+        required: false
+        type: string
+        default: ""
+      metrics-file:
+        description: Path to the numeric metrics JSON written by metrics-command
+        required: false
+        type: string
+        default: ".quality/metrics.json"
 
 jobs:
   quality:
@@ -76,38 +94,116 @@ jobs:
           cache-dependency-path: package-lock.json
 
       - name: Install dependencies
+        id: install
         run: ${{ inputs.install-command }}
 
       - name: Repository preflight
+        id: preflight
         if: ${{ inputs.preflight-command != '' }}
         run: ${{ inputs.preflight-command }}
 
       - name: Lint or format
+        id: lint
         if: ${{ inputs.lint-command != '' }}
         run: ${{ inputs.lint-command }}
 
       - name: TypeScript or type checks
+        id: typecheck
         if: ${{ inputs.typecheck-command != '' }}
         run: ${{ inputs.typecheck-command }}
 
       - name: Build
+        id: build
         run: ${{ inputs.build-command }}
 
       - name: Unit or deterministic tests
+        id: tests
         run: ${{ inputs.test-command }}
 
       - name: Coverage
+        id: coverage
         if: ${{ inputs.coverage-command != '' }}
         run: ${{ inputs.coverage-command }}
 
       - name: Install E2E dependencies
+        id: e2e_install
         if: ${{ inputs.e2e-install-command != '' }}
         run: ${{ inputs.e2e-install-command }}
 
       - name: E2E tests
+        id: e2e
         if: ${{ inputs.e2e-command != '' }}
         run: ${{ inputs.e2e-command }}
 
       - name: Smoke test
+        id: smoke
         if: ${{ inputs.smoke-command != '' }}
         run: ${{ inputs.smoke-command }}
+
+
+      - name: Additional metrics
+        id: metrics
+        if: ${{ always() && inputs.metrics-command != '' }}
+        run: ${{ inputs.metrics-command }}
+
+      - name: Checkout quality standard support
+        if: ${{ always() }}
+        uses: actions/checkout@v4
+        with:
+          repository: AlexFrigenti/project-quality
+          ref: ${{ inputs.standard-sha }}
+          path: .quality-standard
+          fetch-depth: 1
+          sparse-checkout: |
+            schemas/quality-metrics.schema.json
+            scripts/generate-quality-metrics.mjs
+            scripts/validate-quality-metrics.mjs
+
+      - name: Generate quality metrics
+        if: ${{ always() }}
+        env:
+          QUALITY_PROJECT_ID: ${{ github.event.repository.name }}
+          QUALITY_PROJECT_NAME: ${{ github.event.repository.name }}
+          QUALITY_PROJECT_KIND: node
+          QUALITY_STANDARD_VERSION: ${{ inputs.standard-version }}
+          QUALITY_STANDARD_SHA: ${{ inputs.standard-sha }}
+          QUALITY_GATE_IDS: install preflight lint typecheck build tests coverage e2e-install e2e smoke metrics
+          QUALITY_GATE_APPLICABILITY_INSTALL: required
+          QUALITY_GATE_APPLICABILITY_PREFLIGHT: ${{ inputs.preflight-command != '' && 'required' || 'not-applicable' }}
+          QUALITY_GATE_APPLICABILITY_LINT: ${{ inputs.lint-command != '' && 'required' || 'not-applicable' }}
+          QUALITY_GATE_APPLICABILITY_TYPECHECK: ${{ inputs.typecheck-command != '' && 'required' || 'not-applicable' }}
+          QUALITY_GATE_APPLICABILITY_BUILD: required
+          QUALITY_GATE_APPLICABILITY_TESTS: required
+          QUALITY_GATE_APPLICABILITY_COVERAGE: ${{ inputs.coverage-command != '' && 'required' || 'not-applicable' }}
+          QUALITY_GATE_APPLICABILITY_E2E_INSTALL: ${{ inputs.e2e-install-command != '' && 'required' || 'not-applicable' }}
+          QUALITY_GATE_APPLICABILITY_E2E: ${{ inputs.e2e-command != '' && 'required' || 'not-applicable' }}
+          QUALITY_GATE_APPLICABILITY_SMOKE: ${{ inputs.smoke-command != '' && 'required' || 'not-applicable' }}
+          QUALITY_GATE_APPLICABILITY_METRICS: ${{ inputs.metrics-command != '' && 'required' || 'not-applicable' }}
+          QUALITY_GATE_STATUS_INSTALL: ${{ steps.install.outcome || 'unknown' }}
+          QUALITY_GATE_STATUS_PREFLIGHT: ${{ steps.preflight.outcome || 'unknown' }}
+          QUALITY_GATE_STATUS_LINT: ${{ steps.lint.outcome || 'unknown' }}
+          QUALITY_GATE_STATUS_TYPECHECK: ${{ steps.typecheck.outcome || 'unknown' }}
+          QUALITY_GATE_STATUS_BUILD: ${{ steps.build.outcome || 'unknown' }}
+          QUALITY_GATE_STATUS_TESTS: ${{ steps.tests.outcome || 'unknown' }}
+          QUALITY_GATE_STATUS_COVERAGE: ${{ steps.coverage.outcome || 'unknown' }}
+          QUALITY_GATE_STATUS_E2E_INSTALL: ${{ steps.e2e_install.outcome || 'unknown' }}
+          QUALITY_GATE_STATUS_E2E: ${{ steps.e2e.outcome || 'unknown' }}
+          QUALITY_GATE_STATUS_SMOKE: ${{ steps.smoke.outcome || 'unknown' }}
+          QUALITY_GATE_STATUS_METRICS: ${{ steps.metrics.outcome || 'unknown' }}
+          QUALITY_METRICS_FILE: ${{ inputs.metrics-command != '' && inputs.metrics-file || '' }}
+          QUALITY_METRICS_FILE_REQUIRED: ${{ inputs.metrics-command != '' }}
+          QUALITY_RUN_STARTED_AT: ${{ github.run_started_at }}
+          QUALITY_METRICS_OUTPUT: quality-metrics.json
+        run: node .quality-standard/scripts/generate-quality-metrics.mjs
+
+      - name: Validate quality metrics
+        if: ${{ always() }}
+        run: node .quality-standard/scripts/validate-quality-metrics.mjs quality-metrics.json
+
+      - name: Upload quality metrics
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: quality-metrics
+          path: quality-metrics.json
+          if-no-files-found: error

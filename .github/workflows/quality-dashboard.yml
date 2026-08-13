@@ -10,6 +10,13 @@ on:
       - "scripts/audit-repository.mjs"
       - "scripts/assemble-dashboard.mjs"
       - "scripts/validate-dashboard.mjs"
+      - "QUALITY_METRICS.md"
+      - "schemas/**"
+      - "scripts/generate-quality-metrics.mjs"
+      - "scripts/validate-quality-metrics.mjs"
+      - "scripts/test-quality-metrics.mjs"
+      - ".github/workflows/node-quality.yml"
+      - ".github/workflows/static-quality.yml"
   push:
     branches:
       - main
@@ -20,6 +27,13 @@ on:
       - "scripts/audit-repository.mjs"
       - "scripts/assemble-dashboard.mjs"
       - "scripts/validate-dashboard.mjs"
+      - "QUALITY_METRICS.md"
+      - "schemas/**"
+      - "scripts/generate-quality-metrics.mjs"
+      - "scripts/validate-quality-metrics.mjs"
+      - "scripts/test-quality-metrics.mjs"
+      - ".github/workflows/node-quality.yml"
+      - ".github/workflows/static-quality.yml"
   schedule:
     - cron: "17 6 * * 1"
 
@@ -86,6 +100,9 @@ jobs:
     steps:
       - name: Checkout dashboard source
         uses: actions/checkout@v4
+
+      - name: Validate quality metrics contract
+        run: node scripts/test-quality-metrics.mjs
 
       - name: Download audit reports
         uses: actions/download-artifact@v4
