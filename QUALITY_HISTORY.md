@@ -38,7 +38,7 @@ La vista [Evolución histórica](dashboard/history.html) permite filtrar por pro
 - métricas numéricas disponibles;
 - controles declarados como `No aplica`.
 
-La página no convierte los gates booleanos en porcentajes. Los gráficos se añadirán después y solo representarán métricas numéricas que tengan significado real para el proyecto correspondiente.
+La página no convierte los gates booleanos en porcentajes. La vista de evolución dibuja únicamente series numéricas con al menos dos snapshots validados del proyecto seleccionado. Los valores ausentes se omiten, y una métrica con una sola observación permanece visible en el snapshot pero no se presenta como una tendencia.
 
 ## Contenido y privacidad
 
