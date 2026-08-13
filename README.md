@@ -10,6 +10,7 @@ Este repositorio no contiene código de una aplicación concreta. Contiene regla
 - [QUALITY_METRICS.md](QUALITY_METRICS.md): contrato de evidencia estructurada producido por los workflows.
 - [QUALITY_HISTORY.md](QUALITY_HISTORY.md): contrato y persistencia del histórico sanitizado.
 - [schemas/quality-history.schema.json](schemas/quality-history.schema.json): esquema versionado de cada snapshot histórico.
+- [schemas/quality-history-index.schema.json](schemas/quality-history-index.schema.json): esquema del índice que consume GitHub Pages.
 - [DASHBOARD.md](DASHBOARD.md): auditoría de proceso y evidencia real en GitHub Pages.
 - [CONTRIBUTING.md](CONTRIBUTING.md): flujo de trabajo para cambios y Pull Requests.
 - [AGENTS.md](AGENTS.md): instrucciones para agentes de IA que trabajen en los repositorios.
@@ -87,4 +88,6 @@ La validación no debe limitarse a devolver un código cero: debe comprobar cont
 
 ## Histórico persistente
 
-El workflow del dashboard guarda snapshots sanitizados de los estados validados en releases mensuales de GitHub. No se crean commits automáticos sobre `main`, no se duplica una reejecución idéntica y todavía no se calculan puntuaciones ni gráficos artificiales. Consulta [QUALITY_HISTORY.md](QUALITY_HISTORY.md) para el contrato y las reglas de deduplicación.
+El workflow del dashboard guarda snapshots sanitizados de los estados validados en releases mensuales de GitHub. No se crean commits automáticos sobre `main`, no se duplica una reejecución idéntica y no se calculan puntuaciones artificiales.
+
+La página [Evolución histórica](dashboard/history.html) lee un índice generado en cada ejecución de `main`, permite filtrar por proyecto y muestra commits, estados, gates, métricas reales y elementos `No aplica`. Consulta [QUALITY_HISTORY.md](QUALITY_HISTORY.md) para el contrato y las reglas de deduplicación.

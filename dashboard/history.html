@@ -1,0 +1,289 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="color-scheme" content="dark">
+    <title>Project Quality · Evolución histórica</title>
+    <style>
+      :root {
+        --bg: #07111f;
+        --panel: rgba(15, 29, 50, .88);
+        --panel-strong: #10243d;
+        --line: rgba(145, 179, 214, .16);
+        --text: #edf6ff;
+        --muted: #8ea8c2;
+        --cyan: #51d6ed;
+        --green: #51db9b;
+        --amber: #f5c76b;
+        --red: #ff7f87;
+        --blue: #7da8ff;
+        --shadow: 0 22px 60px rgba(0, 0, 0, .28);
+      }
+
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        min-height: 100vh;
+        color: var(--text);
+        background:
+          radial-gradient(circle at 12% -5%, rgba(55, 130, 187, .28), transparent 34rem),
+          radial-gradient(circle at 90% 0%, rgba(22, 92, 127, .18), transparent 30rem),
+          var(--bg);
+        font: 15px/1.55 Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      }
+      a { color: var(--cyan); text-decoration: none; }
+      a:hover { text-decoration: underline; }
+      .shell { width: min(1050px, calc(100% - 36px)); margin: 0 auto; padding: 40px 0 56px; }
+      .back { display: inline-block; margin-bottom: 26px; font-size: 13px; font-weight: 800; }
+      .eyebrow { margin: 0 0 9px; color: var(--cyan); font-size: 11px; font-weight: 800; letter-spacing: .2em; text-transform: uppercase; }
+      h1, h2, h3, p { margin-top: 0; }
+      h1 { margin-bottom: 12px; font-size: clamp(34px, 6vw, 62px); line-height: .98; letter-spacing: -.055em; }
+      .lede { max-width: 700px; margin-bottom: 28px; color: var(--muted); font-size: 17px; }
+      .toolbar { display: flex; align-items: end; justify-content: space-between; gap: 18px; margin-bottom: 28px; padding: 17px; border: 1px solid var(--line); border-radius: 15px; background: rgba(11, 27, 47, .72); box-shadow: var(--shadow); }
+      label { display: grid; gap: 6px; color: var(--muted); font-size: 11px; font-weight: 800; letter-spacing: .06em; text-transform: uppercase; }
+      select { min-width: 260px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 9px; color: var(--text); background: var(--panel-strong); font: inherit; }
+      .history-meta { color: var(--muted); font-size: 12px; text-align: right; }
+      .history-meta strong { display: block; color: var(--text); font-size: 14px; }
+      .overview { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-bottom: 32px; }
+      .stat { padding: 16px; border: 1px solid var(--line); border-radius: 13px; background: linear-gradient(145deg, rgba(20, 43, 70, .9), rgba(10, 24, 42, .75)); }
+      .stat-label { display: block; color: var(--muted); font-size: 11px; font-weight: 800; letter-spacing: .05em; text-transform: uppercase; }
+      .stat-value { display: block; margin-top: 7px; font-size: 22px; font-weight: 800; }
+      .timeline { position: relative; display: grid; gap: 15px; padding-left: 27px; }
+      .timeline::before { content: ""; position: absolute; top: 6px; bottom: 6px; left: 8px; width: 1px; background: var(--line); }
+      .snapshot { position: relative; padding: 20px; border: 1px solid var(--line); border-radius: 16px; background: var(--panel); box-shadow: var(--shadow); }
+      .snapshot::before { content: ""; position: absolute; top: 25px; left: -24px; width: 9px; height: 9px; border: 3px solid var(--bg); border-radius: 50%; background: var(--cyan); box-shadow: 0 0 0 1px var(--cyan); }
+      .snapshot-head { display: flex; align-items: start; justify-content: space-between; gap: 14px; margin-bottom: 14px; }
+      .snapshot-date { margin-bottom: 3px; font-size: 16px; font-weight: 800; }
+      .snapshot-commit { color: var(--muted); font-size: 11px; }
+      .status { display: inline-flex; padding: 4px 8px; border: 1px solid currentColor; border-radius: 999px; font-size: 10px; font-weight: 800; text-transform: uppercase; white-space: nowrap; }
+      .status.pass, .status.passed { color: var(--green); }
+      .status.warning, .status.pending, .status.skipped { color: var(--amber); }
+      .status.fail, .status.failed { color: var(--red); }
+      .status.unknown, .status.unavailable, .status.not-applicable { color: var(--blue); }
+      .snapshot-facts { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; margin-bottom: 16px; }
+      .fact { padding: 10px 11px; border: 1px solid var(--line); border-radius: 10px; background: rgba(7, 17, 31, .44); }
+      .fact-label { display: block; color: var(--muted); font-size: 10px; letter-spacing: .05em; text-transform: uppercase; }
+      .fact-value { display: block; margin-top: 3px; font-size: 13px; font-weight: 700; }
+      .section-label { margin: 15px 0 8px; color: var(--muted); font-size: 10px; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; }
+      .gates, .metrics, .not-applicable { display: flex; flex-wrap: wrap; gap: 7px; margin: 0; padding: 0; list-style: none; }
+      .gate, .metric, .not-applicable li { padding: 7px 9px; border: 1px solid var(--line); border-radius: 8px; background: rgba(16, 36, 61, .58); font-size: 11px; }
+      .gate { display: inline-flex; align-items: center; gap: 7px; }
+      .gate strong { color: var(--text); }
+      .gate span { font-weight: 800; text-transform: uppercase; }
+      .gate .passed { color: var(--green); }
+      .gate .failed { color: var(--red); }
+      .gate .skipped { color: var(--amber); }
+      .gate .unknown, .gate .not-applicable { color: var(--blue); }
+      .metric strong { color: var(--cyan); }
+      .not-applicable li { color: var(--muted); }
+      .empty, .error { padding: 28px; border: 1px dashed var(--line); border-radius: 15px; color: var(--muted); text-align: center; }
+      .error { border-color: rgba(255, 127, 135, .4); color: var(--red); background: rgba(112, 24, 37, .15); }
+      footer { margin-top: 34px; padding-top: 18px; border-top: 1px solid var(--line); color: var(--muted); font-size: 12px; }
+
+      @media (max-width: 680px) {
+        .shell { width: min(100% - 24px, 1050px); padding-top: 28px; }
+        .toolbar { display: block; }
+        select { width: 100%; min-width: 0; }
+        .history-meta { margin-top: 14px; text-align: left; }
+        .overview { grid-template-columns: 1fr; }
+        .snapshot-head { display: block; }
+        .snapshot-head .status { margin-top: 10px; }
+        .snapshot-facts { grid-template-columns: 1fr; }
+      }
+    </style>
+  </head>
+  <body>
+    <main class="shell">
+      <a class="back" href="./">← Volver al mapa de proyectos</a>
+      <header>
+        <p class="eyebrow">Project quality / histórico</p>
+        <h1>Evolución verificable.</h1>
+        <p class="lede">Una línea temporal de los commits de <code>main</code> que han producido evidencia validada. Los estados booleanos se muestran como estados; no se convierten en una puntuación.</p>
+      </header>
+
+      <section class="toolbar" aria-label="Filtro histórico">
+        <label>Proyecto
+          <select id="project-filter"></select>
+        </label>
+        <div class="history-meta" id="history-meta">Cargando histórico…</div>
+      </section>
+
+      <section class="overview" id="overview" aria-label="Resumen del histórico"></section>
+      <section id="timeline" class="timeline" aria-live="polite"></section>
+
+      <footer>
+        Los snapshots están sanitizados y proceden de los assets persistentes del histórico de calidad.
+      </footer>
+    </main>
+
+    <script>
+      const projectLabels = {
+        "gestor-autonomo": "Gestor Autónomo",
+        "nexo": "Nexo",
+        "nucleo": "Núcleo",
+        "nucleo-preview": "Núcleo Preview"
+      };
+
+      const processLabels = {
+        pass: "Saludable",
+        warning: "Revisar",
+        fail: "Fallo",
+        unknown: "Sin evidencia",
+        pending: "Pendiente",
+        missing: "Falta",
+        not_applicable: "No aplica"
+      };
+
+      const qualityLabels = {
+        passed: "Correcto",
+        failed: "Fallo",
+        skipped: "Omitido",
+        "not-applicable": "No aplica",
+        unknown: "Sin evidencia"
+      };
+
+      function escapeHtml(value) {
+        return String(value ?? "").replace(/[&<>'"]/g, (character) => ({
+          "&": "&amp;",
+          "<": "&lt;",
+          ">": "&gt;",
+          "'": "&#39;",
+          '"': "&quot;"
+        }[character]));
+      }
+
+      function shortSha(value) {
+        return value ? String(value).slice(0, 12) + "…" : "sin SHA";
+      }
+
+      function formatDate(value) {
+        return new Intl.DateTimeFormat("es-ES", { dateStyle: "medium", timeStyle: "short" }).format(new Date(value));
+      }
+
+      function processLabel(value) {
+        return processLabels[value] || processLabels.unknown;
+      }
+
+      function statusClass(value) {
+        return value === "pass" || value === "passed"
+          ? "pass"
+          : value === "fail" || value === "failed"
+            ? "fail"
+            : value === "warning" || value === "pending" || value === "skipped"
+              ? "warning"
+              : "unknown";
+      }
+
+      function qualityLabel(quality) {
+        if (quality.status === "current") return qualityLabels[quality.conclusion] || qualityLabels.unknown;
+        if (quality.status === "pending") return "Pendiente";
+        return "Sin evidencia";
+      }
+
+      function flattenMetrics(value, prefix) {
+        if (typeof value === "number") return [[prefix, value]];
+        if (!value || typeof value !== "object" || Array.isArray(value)) return [];
+        return Object.entries(value).flatMap(([key, child]) => flattenMetrics(child, prefix ? prefix + " · " + key : key));
+      }
+
+      function formatMetric(path, value) {
+        return String(value) + (/coverage/i.test(path) ? "%" : "");
+      }
+
+      function renderSelect(snapshots, selected) {
+        const ids = new Set();
+        snapshots.forEach((snapshot) => snapshot.repositories.forEach((repository) => ids.add(repository.id)));
+        const options = [...ids].map((id) => '<option value="' + escapeHtml(id) + '"' + (id === selected ? " selected" : "") + '>' + escapeHtml(projectLabels[id] || id) + '</option>');
+        document.getElementById("project-filter").innerHTML = options.join("");
+      }
+
+      function renderOverview(records) {
+        const latest = records[0];
+        const qualityCurrent = records.filter((record) => record.repository.quality.status === "current").length;
+        const items = [
+          ["Snapshots", records.length],
+          ["Evidencia actual", qualityCurrent + " / " + records.length],
+          ["Última validación", latest ? formatDate(latest.snapshot.generatedAt) : "—"]
+        ];
+        document.getElementById("overview").innerHTML = items.map(([label, value]) => '<article class="stat"><span class="stat-label">' + escapeHtml(label) + '</span><span class="stat-value">' + escapeHtml(value) + '</span></article>').join("");
+      }
+
+      function renderSnapshot(record) {
+        const snapshot = record.snapshot;
+        const repository = record.repository;
+        const quality = repository.quality;
+        const process = repository.process;
+        const gates = quality.status === "current" ? (quality.gates || []).map((gate) => {
+          const gateStatus = gate.status || "unknown";
+          return '<li class="gate"><strong>' + escapeHtml(gate.label) + '</strong><span class="' + escapeHtml(gateStatus) + '">' + escapeHtml(qualityLabels[gateStatus] || "Sin evidencia") + '</span></li>';
+        }).join("") : "";
+        const metrics = quality.status === "current" ? flattenMetrics(quality.metrics || {}, "").map(([path, value]) => '<li class="metric">' + escapeHtml(path) + ': <strong>' + escapeHtml(formatMetric(path, value)) + '</strong></li>').join("") : "";
+        const notApplicable = repository.notApplicableAreas.map((area) => '<li>' + escapeHtml(area) + ' · No aplica</li>').join("");
+        const qualityDetail = quality.status === "current"
+          ? qualityLabel(quality)
+          : (quality.message || "Evidencia no disponible.");
+
+        return [
+          '<article class="snapshot">',
+          '<div class="snapshot-head"><div><div class="snapshot-date">' + escapeHtml(formatDate(snapshot.generatedAt)) + '</div>',
+          '<div class="snapshot-commit">Commit del dashboard: <code>' + escapeHtml(shortSha(snapshot.dashboardCommitSha)) + '</code> · estándar ' + escapeHtml(snapshot.standard.release) + '</div></div>',
+          '<span class="status ' + escapeHtml(statusClass(quality.status === "current" ? quality.conclusion : quality.status)) + '">' + escapeHtml(qualityDetail) + '</span></div>',
+          '<div class="snapshot-facts">',
+          '<div class="fact"><span class="fact-label">Proceso</span><span class="fact-value">' + escapeHtml(processLabel(process.overall)) + '</span></div>',
+          '<div class="fact"><span class="fact-label">Commit validado</span><span class="fact-value"><code>' + escapeHtml(shortSha(quality.commitSha || quality.currentHeadSha)) + '</code></span></div>',
+          '</div>',
+          gates ? '<div class="section-label">Gates</div><ul class="gates">' + gates + '</ul>' : '',
+          metrics ? '<div class="section-label">Métricas cuantificables</div><ul class="metrics">' + metrics + '</ul>' : '',
+          notApplicable ? '<div class="section-label">No aplica por perfil</div><ul class="not-applicable">' + notApplicable + '</ul>' : '',
+          '</article>'
+        ].join("");
+      }
+
+      function renderHistory(index, selected) {
+        const records = index.snapshots.map((snapshot) => {
+          const repository = snapshot.repositories.find((item) => item.id === selected);
+          return repository ? { snapshot, repository } : null;
+        }).filter(Boolean);
+
+        renderOverview(records);
+        document.getElementById("history-meta").innerHTML = '<strong>' + escapeHtml(projectLabels[selected] || selected) + '</strong>' + escapeHtml(index.snapshots.length + " snapshots sanitizados");
+        document.getElementById("timeline").innerHTML = records.length
+          ? records.map(renderSnapshot).join("")
+          : '<div class="empty">Todavía no existe evidencia histórica para este proyecto.</div>';
+      }
+
+      async function loadHistory() {
+        try {
+          const response = await fetch("./history.json", { cache: "no-store" });
+          if (!response.ok) throw new Error("HTTP " + response.status);
+          const index = await response.json();
+          if (!Array.isArray(index.snapshots)) throw new Error("Formato histórico inválido.");
+          const ids = new Set(index.snapshots.flatMap((snapshot) => snapshot.repositories.map((repository) => repository.id)));
+          const queryProject = new URLSearchParams(window.location.search).get("project");
+          const selected = ids.has(queryProject) ? queryProject : [...ids][0];
+
+          if (!selected) {
+            document.getElementById("history-meta").textContent = "Sin snapshots disponibles";
+            document.getElementById("timeline").innerHTML = '<div class="empty">El histórico aparecerá cuando se valide un commit de main.</div>';
+            document.getElementById("overview").innerHTML = "";
+            return;
+          }
+
+          renderSelect(index.snapshots, selected);
+          renderHistory(index, selected);
+          document.getElementById("project-filter").addEventListener("change", (event) => {
+            const next = event.target.value;
+            window.history.replaceState({}, "", "./history.html?project=" + encodeURIComponent(next));
+            renderHistory(index, next);
+          });
+        } catch (error) {
+          document.getElementById("history-meta").textContent = "Histórico no disponible";
+          document.getElementById("timeline").innerHTML = '<div class="error">No se pudo cargar el histórico persistente. Ejecuta el workflow de calidad de main para generarlo.</div>';
+        }
+      }
+
+      loadHistory();
+    </script>
+  </body>
+</html>
