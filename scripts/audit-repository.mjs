@@ -144,13 +144,15 @@ const report = {
     visibility,
     access: "available",
     defaultBranch: null,
-    url: publicUrl
+    url: publicUrl,
+    headSha: null
   },
   profile: {
     id: profileId,
     label: profile.label,
     kind: profile.kind,
-    description: profile.description
+    description: profile.description,
+    notApplicableAreas: profile.notApplicableAreas || []
   },
   governance: { ruleset: null },
   workflow: {
@@ -174,7 +176,7 @@ const report = {
     currentCommitSha: null,
     validatedCommitSha: null,
     artifact: null,
-    report: null
+    summary: null
   },
   checks: [],
   issues: [],
@@ -186,7 +188,7 @@ if (!repoResponse.ok) {
   report.repository.access = "required";
   report.overall = "warning";
   const message = repoResponse.status === 404
-    ? "Repositorio no accesible con las credenciales disponibles; se necesita QUALITY_AUDIT_TOKEN para auditarlo."
+    ? "No hay credenciales de lectura disponibles para auditar este repositorio."
     : `GitHub no pudo leer el repositorio (HTTP ${repoResponse.status || "red"}).`;
   addIssue(report, message);
   addCheck(report, "access", "Acceso al repositorio", "warning", message);
@@ -291,14 +293,15 @@ const qualityEvidence = await collectQualityEvidence({
   repository,
   defaultBranch,
   currentCommitSha,
-  workflowFile
+  workflowFile,
+  exposeLinks: report.repository.visibility !== "private"
 });
 report.qualityEvidence = qualityEvidence;
 
 if (qualityEvidence.status === "current" && qualityEvidence.report) {
-  const conclusion = qualityEvidence.report.conclusion;
+  const conclusion = qualityEvidence.summary.conclusion;
   const status = conclusion === "passed" ? "pass" : conclusion === "failed" ? "fail" : "unknown";
-  const run = qualityEvidence.report.run;
+  const run = qualityEvidence.summary.run;
   const detail = "Evidencia correspondiente al commit " + qualityEvidence.validatedCommitSha.slice(0, 12) + "…. Conclusión: " + conclusion + ".";
   report.qualityRun = {
     status,
