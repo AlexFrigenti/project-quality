@@ -1,6 +1,6 @@
 # Flujo oficial de desarrollo asistido por IA
 
-> Estado: propuesta aprobada para revisión escrita.
+> Estado: propuesta para revisión escrita.
 >
 > Este documento define el diseño del flujo. No instala herramientas ni modifica los repositorios consumidores.
 
@@ -271,7 +271,7 @@ La integración se realiza mediante merge commit. Después se verifica `main`, s
 Los artefactos de T1 y T2 se conservarán en una carpeta propia del cambio:
 
 ```text
-specs/<id>-<slug>/
+specs/NNN-feature-name/
   spec.md
   plan.md
   tasks.md
