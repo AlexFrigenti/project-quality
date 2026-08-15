@@ -185,6 +185,18 @@ Añadir progresivamente:
 
 Cuando el workflow sea estable, configurar las reglas de `main` para exigir la PR y los checks adecuados. Antes de bloquear, comprobar que los nombres de los checks son estables y que el workflow también funciona para PRs.
 
+
+## Flujo de desarrollo asistido por IA
+
+Todo cambio se clasifica antes de editar como T0 (trivial), T1 (funcional) o T2 (complejo o sensible), según el diseño operativo de docs/superpowers/specs/2026-08-15-official-ai-development-flow-design.md.
+
+- T0 requiere alcance breve, diff revisado y validación adecuada.
+- T1 requiere especificación, plan, tareas, criterios de aceptación y pruebas relacionadas.
+- T2 añade decisiones técnicas, riesgos, contratos o invariantes afectados y plan de pruebas ampliado.
+
+El ciclo común es: contexto y exclusiones → especificación → plan → tareas y pruebas → implementación aislada → verificación local → Pull Request → checks y revisión → merge commit confirmado → limpieza de rama. La especificación documenta la intención; el código y las pruebas muestran el comportamiento; GitHub Actions aporta la evidencia. Ningún documento sustituye los gates técnicos ni justifica controles artificiales.
+
+Los artefactos T1/T2 se guardan en specs/NNN-feature-name/ cuando el proyecto adopte ese flujo. research.md, contratos, diagramas y checklists solo se crean cuando aportan información real. En esta primera implantación no se bloquean PRs únicamente por carecer de especificación.
 ## Definition of Done
 
 Un cambio está listo cuando:

@@ -20,6 +20,17 @@
 8. Atiende los checks y la revisión.
 9. Fusiona solo cuando el estado sea correcto y exista autorización para hacerlo.
 
+
+## Flujo de desarrollo asistido por IA
+
+Clasifica el cambio antes de editar:
+
+- **T0:** cambios triviales sin modificación de comportamiento. Requieren alcance breve, diff y validación.
+- **T1:** cambios funcionales o correcciones de lógica. Requieren especificación, plan, tareas, criterios de aceptación y pruebas.
+- **T2:** migraciones, datos, seguridad, facturación, integraciones, despliegues o cambios transversales. Requieren además riesgos, decisiones, invariantes y plan de reversión o compatibilidad cuando proceda.
+
+El responsable debe aprobar el alcance y resolver ambigüedades relevantes antes de implementar. La PR debe enlazar los artefactos, criterios, pruebas y evidencia de Actions. Antes de pedir revisión hay que comprobar estado, diff completo, controles aplicables, secretos y archivos fuera de alcance. El merge se hace mediante merge commit tras confirmación explícita; después se verifica main y se elimina la rama remota.
+
 ## Checklist de validación
 
 La PR debe indicar qué se ha ejecutado entre:
