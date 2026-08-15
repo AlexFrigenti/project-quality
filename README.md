@@ -24,6 +24,13 @@ Se comparte el nivel de exigencia, no la implementación concreta.
 
 Cada proyecto debe adaptar sus comandos, pruebas, cobertura y validaciones a su arquitectura. No se deben copiar dependencias, migraciones, bindings, reglas fiscales ni infraestructura específica de otro repositorio.
 
+
+## Flujo oficial de desarrollo asistido por IA
+
+Los cambios se clasifican como T0 (trivial), T1 (funcional) o T2 (complejo o sensible). T0 usa un flujo reducido; T1 y T2 parten de una especificación, un plan, tareas, criterios de aceptación y pruebas proporcionales al riesgo. El flujo completo está documentado en docs/superpowers/specs/2026-08-15-official-ai-development-flow-design.md y su plan de implantación en docs/superpowers/plans/2026-08-15-official-ai-development-flow.md.
+
+El método es independiente del agente utilizado. Spec Kit puede generar y mantener los artefactos estructurados; las prácticas de Superpowers refuerzan TDD, debugging y verificación. GitHub Actions sigue siendo la autoridad para la evidencia técnica y el dashboard no convierte el proceso en una puntuación artificial.
+
 ## Uso
 
 1. Lee el contrato de calidad.
