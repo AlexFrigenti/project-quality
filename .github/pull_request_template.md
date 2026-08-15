@@ -1,3 +1,16 @@
+## Clasificación del cambio
+
+- Nivel: [ ] T0 trivial  [ ] T1 funcional  [ ] T2 complejo o sensible
+- Especificación o brief:
+- Plan:
+- Tareas:
+- Criterios de aceptación:
+- Elementos fuera de alcance:
+
+## Trazabilidad
+
+Explica cómo cada criterio de aceptación queda cubierto por una prueba, validación determinista o revisión manual. Si algún artefacto o control no aplica, indícalo y explica por qué.
+
 ## Alcance
 
 Describe brevemente qué cambia esta Pull Request y qué queda fuera.
