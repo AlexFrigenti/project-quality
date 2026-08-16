@@ -10,7 +10,6 @@ Antes de actuar:
 4. Revisa la implementación y las pruebas relacionadas.
 5. Expón el alcance antes de modificar archivos si existe ambigüedad.
 
-
 ## Flujo de desarrollo asistido por IA
 
 Antes de modificar archivos, identifica repositorio, rama base, objetivo, exclusiones y nivel T0/T1/T2. Lee el README, el contexto técnico, AGENTS.md, CONTRIBUTING.md y las instrucciones específicas.
@@ -29,9 +28,20 @@ Para T1/T2 no implementes con ambigüedad relevante: plantea las decisiones y ac
 - No inventes requisitos técnicos que el proyecto no necesita.
 - No introduzcas migraciones, dependencias, endpoints o integraciones sin justificar su necesidad.
 - No incluyas datos personales, documentos reales, secretos, tokens ni credenciales.
-- No hagas merge ni despliegue sin confirmación explícita cuando el flujo del proyecto lo exija.
+- No hagas merge ni despliegue sin confirmación explícita cuando el flujo del proyecto lo exija. Cuando se autorice el merge, usa merge commit, verifica `main` y elimina la rama remota cuando corresponda.
 - Conserva los cambios existentes y no reviertas trabajo ajeno.
 - Revisa el diff completo antes de cerrar la tarea.
+
+## Ejecución agentic proporcional
+
+Mantén el proceso proporcional al riesgo y complejidad del cambio.
+
+Por defecto, utiliza una implementación coherente, una revisión independiente del diff completo, una ronda agrupada de correcciones y una verificación final.
+
+- No asignes automáticamente un subagente independiente a cada microtarea ni encadenes rondas completas de implementación, revisión y corrección sin necesidad técnica.
+- Si después de la primera ronda de correcciones fuera necesaria otra revisión integral o una nueva ronda sustancial de trabajo, detente, resume el estado y solicita autorización antes de continuar.
+- Los revisores deben priorizar el diff, los requisitos y el contexto necesario, evitando releer repetidamente archivos o áreas no afectadas salvo que sea necesario.
+- Reutiliza evidencia de validación que siga siendo válida y no repitas análisis o pruebas costosas sin una razón técnica.
 
 ## Validación
 
