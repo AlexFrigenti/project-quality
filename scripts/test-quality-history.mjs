@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readFile } from "node:fs/promises";
 import { buildQualityHistorySnapshot } from "./persist-quality-history.mjs";
 import { validateQualityHistory } from "./validate-quality-history.mjs";
 
@@ -93,5 +94,47 @@ for (const report of noCurrent.repositories) {
   report.qualityEvidence = { status: "pending", message: "Evidencia pendiente para el commit actual" };
 }
 assert.equal(buildQualityHistorySnapshot(noCurrent, { dashboardCommitSha: dashboardSha }), null);
+
+const sampleGate = { id: "tests", label: "Tests", applicability: "required", status: "passed", details: "Gate ejecutado correctamente." };
+
+const currentWithEmptyGates = structuredClone(first);
+currentWithEmptyGates.repositories[0].quality.gates = [];
+assert.throws(() => validateQualityHistory(currentWithEmptyGates), /actual debe contener al menos un gate/);
+
+const pendingWithEmptyGates = structuredClone(first);
+pendingWithEmptyGates.repositories[3].quality.status = "pending";
+pendingWithEmptyGates.repositories[3].quality.gates = [];
+assert.doesNotThrow(() => validateQualityHistory(pendingWithEmptyGates));
+
+const pendingWithNonEmptyGates = structuredClone(first);
+pendingWithNonEmptyGates.repositories[3].quality.status = "pending";
+pendingWithNonEmptyGates.repositories[3].quality.gates = [sampleGate];
+assert.throws(() => validateQualityHistory(pendingWithNonEmptyGates), /no puede contener gates en estado pending/);
+
+const unavailableWithEmptyGates = structuredClone(first);
+unavailableWithEmptyGates.repositories[3].quality.status = "unavailable";
+unavailableWithEmptyGates.repositories[3].quality.message = "Evidencia no disponible";
+unavailableWithEmptyGates.repositories[3].quality.gates = [];
+assert.doesNotThrow(() => validateQualityHistory(unavailableWithEmptyGates));
+
+const unavailableWithNonEmptyGates = structuredClone(first);
+unavailableWithNonEmptyGates.repositories[3].quality.status = "unavailable";
+unavailableWithNonEmptyGates.repositories[3].quality.message = "Evidencia no disponible";
+unavailableWithNonEmptyGates.repositories[3].quality.gates = [sampleGate];
+assert.throws(() => validateQualityHistory(unavailableWithNonEmptyGates), /no puede contener gates en estado unavailable/);
+
+const schema = JSON.parse(await readFile("schemas/quality-history.schema.json", "utf8"));
+assert.equal(schema.properties.schemaVersion.const, 1);
+assert.ok(schema.$defs.quality.required.includes("gates"));
+assert.equal(schema.$defs.quality.properties.gates.type, "array");
+assert.equal("minItems" in schema.$defs.quality.properties.gates, false);
+
+const currentCondition = schema.$defs.quality.allOf.find((cond) => cond.if?.properties?.status?.const === "current");
+assert.ok(currentCondition);
+assert.equal(currentCondition.then?.properties?.gates?.minItems, 1);
+
+const nonCurrentCondition = schema.$defs.quality.allOf.find((cond) => cond.if?.properties?.status?.enum?.includes("pending"));
+assert.ok(nonCurrentCondition);
+assert.equal(nonCurrentCondition.then?.properties?.gates?.maxItems, 0);
 
 console.log("Histórico de calidad válido.");
