@@ -61,6 +61,22 @@ assert.equal(first.repositories.find((repo) => repo.id === "gestor-autonomo").qu
 assert.equal(/url|token|Bearer/i.test(JSON.stringify(first)), false);
 assert.throws(() => validateQualityHistory({ ...first, unexpected: true }), /no está permitido/);
 
+const withUrlTextInDetails = structuredClone(first);
+withUrlTextInDetails.repositories[0].quality.gates[0].details = "url: no requerida para el gate";
+assert.doesNotThrow(() => validateQualityHistory(withUrlTextInDetails));
+
+const withForbiddenUrlMetric = structuredClone(first);
+withForbiddenUrlMetric.repositories[0].quality.metrics.url = 10;
+assert.throws(() => validateQualityHistory(withForbiddenUrlMetric), /no puede contener URLs/);
+
+const withHttpUrl = structuredClone(first);
+withHttpUrl.repositories[0].quality.gates[0].details = "https://example.invalid";
+assert.throws(() => validateQualityHistory(withHttpUrl), /no puede contener URLs/);
+
+const withTokenInMetricKey = structuredClone(first);
+withTokenInMetricKey.repositories[0].quality.metrics.ghp_secretToken = 10;
+assert.throws(() => validateQualityHistory(withTokenInMetricKey), /patrón que parece un token/);
+
 const rerun = buildQualityHistorySnapshot(data, { now: new Date("2026-08-13T11:05:00.000Z"), dashboardCommitSha: dashboardSha });
 assert.equal(rerun.id, first.id);
 assert.notEqual(rerun.generatedAt, first.generatedAt);

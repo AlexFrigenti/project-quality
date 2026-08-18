@@ -127,6 +127,28 @@ function validateQuality(quality, path) {
   }
 }
 
+function rejectUnsafe(value, path = "snapshot", seen = new Set()) {
+  if (value === null) fail(path + " no puede ser null");
+  if (typeof value === "string") {
+    if (TOKEN_PATTERN.test(value)) fail("El histórico contiene un patrón que parece un token");
+    if (/https?:\/\//i.test(value)) fail("El histórico no puede contener URLs");
+    return;
+  }
+  if (typeof value !== "object") return;
+  if (seen.has(value)) fail(path + " contiene una referencia circular");
+  seen.add(value);
+  if (Array.isArray(value)) {
+    value.forEach((item, index) => rejectUnsafe(item, path + "[" + index + "]", seen));
+  } else {
+    for (const [key, child] of Object.entries(value)) {
+      if (TOKEN_PATTERN.test(key)) fail("El histórico contiene un patrón que parece un token");
+      if (key.toLowerCase() === "url" || /https?:\/\//i.test(key)) fail("El histórico no puede contener URLs");
+      rejectUnsafe(child, path + "." + key, seen);
+    }
+  }
+  seen.delete(value);
+}
+
 export function validateQualityHistory(snapshot) {
   object(snapshot, "snapshot");
   keys(snapshot, new Set(["schemaVersion", "id", "generatedAt", "dashboardCommitSha", "standard", "repositories"]), "snapshot");
@@ -160,8 +182,7 @@ export function validateQualityHistory(snapshot) {
     validateQuality(repository.quality, path + ".quality");
   });
 
-  if (TOKEN_PATTERN.test(JSON.stringify(snapshot))) fail("El histórico contiene un patrón que parece un token");
-  if (/(https?:\/\/|(^|["'])url("|:))/i.test(JSON.stringify(snapshot))) fail("El histórico no puede contener URLs");
+  rejectUnsafe(snapshot);
   return true;
 }
 
