@@ -97,7 +97,7 @@ export function validateDashboard(value) {
 }
 
 async function main() {
-  const file = process.argv[2] || "dashboard/data.json";
+  const file = process.argv[2] || "site/data.json";
   const value = JSON.parse(await readFile(file, "utf8"));
   validateDashboard(value);
   console.log("Dashboard válido: " + value.repositories.length + " repositorios.");
