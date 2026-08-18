@@ -179,4 +179,32 @@ const baseProcess = {
   assert.ok(overviewHtml.includes("Evidencia no disponible"), "El overview debe mostrar el mensaje de fallback");
 }
 
+// 5. Caso PROCESS PENDING (verificación de etiqueta 'En curso' para proceso)
+{
+  const processLabel = context.processLabel;
+  assert.equal(typeof processLabel, "function", "processLabel debe estar definida en history.html");
+  assert.equal(processLabel("pending"), "En curso", "processLabel('pending') debe devolver 'En curso'");
+
+  const record = {
+    snapshot: baseSnapshot,
+    repository: {
+      id: "gestor-autonomo",
+      notApplicableAreas: [],
+      process: { overall: "pending" },
+      quality: {
+        status: "current",
+        commitSha: "4444444444444444444444444444444444444444",
+        validatedAt: "2026-08-15T10:00:00.000Z",
+        conclusion: "passed",
+        gates: [{ id: "build", label: "Build", status: "passed", applicability: "required" }],
+        metrics: {}
+      }
+    }
+  };
+
+  const rendered = renderSnapshot(record);
+  assert.ok(rendered.includes('<span class="fact-value">En curso</span>'), "En estado de proceso pending debe aparecer 'En curso'");
+  assert.ok(!rendered.includes('<span class="fact-value">Pendiente</span>'), "En estado de proceso pending NO debe aparecer 'Pendiente'");
+}
+
 console.log("Pruebas de renderizado de histórico válidas.");
