@@ -8,6 +8,7 @@ on:
       - "DASHBOARD.md"
       - "dashboard/**"
       - "scripts/audit-repository.mjs"
+      - "scripts/test-audit-profiles.mjs"
       - "scripts/assemble-dashboard.mjs"
       - "scripts/validate-dashboard.mjs"
       - "QUALITY_METRICS.md"
@@ -33,6 +34,7 @@ on:
       - "DASHBOARD.md"
       - "dashboard/**"
       - "scripts/audit-repository.mjs"
+      - "scripts/test-audit-profiles.mjs"
       - "scripts/assemble-dashboard.mjs"
       - "scripts/validate-dashboard.mjs"
       - "QUALITY_METRICS.md"
@@ -119,6 +121,9 @@ jobs:
 
       - name: Validate quality metrics contract
         run: node scripts/test-quality-metrics.mjs
+
+      - name: Validate audit profiles
+        run: node scripts/test-audit-profiles.mjs
 
       - name: Validate collector
         run: node scripts/test-quality-evidence.mjs
