@@ -583,7 +583,15 @@
         const latest = records[0];
         const quality = latest?.repository?.quality;
         const gateSummary = summarizeGates(quality);
-        const commitSha = quality?.commitSha || quality?.currentHeadSha;
+        const isCurrent = quality?.status === "current";
+        const validationDate = isCurrent
+          ? formatCompactDate(quality.validatedAt)
+          : "—";
+        const validationNote = isCurrent
+          ? (quality.commitSha ? "Commit " + shortSha(quality.commitSha) : "Sin evidencia")
+          : (quality?.currentHeadSha
+              ? "Commit actual " + shortSha(quality.currentHeadSha) + (quality.status === "pending" ? " (pendiente)" : " (sin validar)")
+              : (quality?.message || "Sin evidencia"));
         const gateNotes = [];
 
         if (gateSummary) {
@@ -609,9 +617,9 @@
           },
           {
             label: "Última validación",
-            value: latest ? formatCompactDate(latest.snapshot.generatedAt) : "—",
+            value: validationDate,
             unit: "",
-            note: commitSha ? "Commit " + shortSha(commitSha) : "Sin evidencia"
+            note: validationNote
           }
         ];
 
@@ -666,16 +674,20 @@
         const repository = record.repository;
         const quality = repository.quality;
         const process = repository.process;
-        const gates = quality.status === "current" ? (quality.gates || []).map((gate) => {
+        const isCurrent = quality.status === "current";
+        const commitFact = isCurrent
+          ? '<div class="fact"><span class="fact-label">Commit validado</span><span class="fact-value">' + (quality.commitSha ? '<code>' + escapeHtml(shortSha(quality.commitSha)) + '</code>' : '—') + '</span></div>'
+          : '<div class="fact"><span class="fact-label">Commit actual</span><span class="fact-value">' + (quality.currentHeadSha ? '<code>' + escapeHtml(shortSha(quality.currentHeadSha)) + '</code>' : '—') + '</span></div>';
+        const gates = isCurrent ? (quality.gates || []).map((gate) => {
           const gateStatus = ["passed", "failed", "skipped", "not-applicable", "unknown"].includes(gate.status) ? gate.status : "unknown";
           return '<li class="gate gate-' + escapeHtml(gateStatus) + '">' +
             '<span class="gate-icon" aria-hidden="true">' + escapeHtml(gateSymbol(gateStatus)) + '</span>' +
             '<span class="gate-content"><strong>' + escapeHtml(gate.label) + '</strong><span class="gate-status ' + escapeHtml(gateStatus) + '">' + escapeHtml(qualityLabels[gateStatus] || "Sin evidencia") + '</span></span>' +
             '</li>';
         }).join("") : "";
-        const metrics = quality.status === "current" ? renderMetricGroups(quality.metrics || {}) : "";
+        const metrics = isCurrent ? renderMetricGroups(quality.metrics || {}) : "";
         const notApplicable = repository.notApplicableAreas.map((area) => '<li>' + escapeHtml(area) + ' · No aplica</li>').join("");
-        const qualityDetail = quality.status === "current"
+        const qualityDetail = isCurrent
           ? qualityLabel(quality)
           : (quality.message || "Evidencia no disponible.");
 
@@ -683,10 +695,10 @@
           '<article class="snapshot">',
           '<div class="snapshot-head"><div><div class="snapshot-date">' + escapeHtml(formatDate(snapshot.generatedAt)) + '</div>',
           '<div class="snapshot-commit">Commit del dashboard: <code>' + escapeHtml(shortSha(snapshot.dashboardCommitSha)) + '</code> · estándar ' + escapeHtml(snapshot.standard.release) + '</div></div>',
-          '<span class="status ' + escapeHtml(statusClass(quality.status === "current" ? quality.conclusion : quality.status)) + '">' + escapeHtml(qualityDetail) + '</span></div>',
+          '<span class="status ' + escapeHtml(statusClass(isCurrent ? quality.conclusion : quality.status)) + '">' + escapeHtml(qualityDetail) + '</span></div>',
           '<div class="snapshot-facts">',
           '<div class="fact"><span class="fact-label">Proceso</span><span class="fact-value">' + escapeHtml(processLabel(process.overall)) + '</span></div>',
-          '<div class="fact"><span class="fact-label">Commit validado</span><span class="fact-value"><code>' + escapeHtml(shortSha(quality.commitSha || quality.currentHeadSha)) + '</code></span></div>',
+          commitFact,
           '</div>',
           gates ? '<div class="section-label">Gates</div><ul class="gates">' + gates + '</ul>' : '',
           metrics ? '<div class="section-label">Métricas cuantificables</div><div class="metrics">' + metrics + '</div>' : '',
