@@ -68,15 +68,14 @@ const sample = {
       label: "Ejecución del workflow de calidad",
       url: "https://github.com/AlexFrigenti/example/actions/runs/123"
     }
-  ],
-  unexpected: "this field is deliberately removed"
+  ]
 };
 
 const sanitized = sanitizeQualityMetrics(sample);
 assert.equal(sanitized.schemaVersion, 1);
 assert.equal(sanitized.commit.sha, sample.commit.sha);
 assert.deepEqual(sanitized.metrics, sample.metrics);
-assert.equal("unexpected" in sanitized, false);
+assert.throws(() => sanitizeQualityMetrics({ ...sample, unexpected: "invalido" }), /report\.unexpected no está permitido/);
 
 const publicSummary = buildQualitySummary(sample, { exposeLinks: true });
 assert.equal(publicSummary.run.url, sample.run.url);
