@@ -9,6 +9,7 @@ on:
       - "dashboard/**"
       - "scripts/audit-repository.mjs"
       - "scripts/test-audit-profiles.mjs"
+      - "scripts/test-history-rendering.mjs"
       - "scripts/assemble-dashboard.mjs"
       - "scripts/validate-dashboard.mjs"
       - "QUALITY_METRICS.md"
@@ -35,6 +36,7 @@ on:
       - "dashboard/**"
       - "scripts/audit-repository.mjs"
       - "scripts/test-audit-profiles.mjs"
+      - "scripts/test-history-rendering.mjs"
       - "scripts/assemble-dashboard.mjs"
       - "scripts/validate-dashboard.mjs"
       - "QUALITY_METRICS.md"
@@ -124,6 +126,9 @@ jobs:
 
       - name: Validate audit profiles
         run: node scripts/test-audit-profiles.mjs
+
+      - name: Validate history rendering
+        run: node scripts/test-history-rendering.mjs
 
       - name: Validate collector
         run: node scripts/test-quality-evidence.mjs
