@@ -81,6 +81,8 @@ assert.ok(schema.required.includes("gates"));
 assert.ok(schema.required.includes("metrics"));
 assert.ok(schema.$defs.gate.properties.applicability.enum.includes("not-applicable"));
 assert.ok(schema.$defs.gate.properties.status.enum.includes("unknown"));
+assert.equal(schema.properties.metrics.propertyNames.pattern, "^[a-zA-Z][a-zA-Z0-9_-]*$");
+assert.equal(schema.$defs.metricValue.oneOf[1].propertyNames.pattern, "^[a-zA-Z][a-zA-Z0-9_-]*$");
 
 assert.throws(() => validateQualityMetrics({ ...report, standard: { ...report.standard, sha: "invalid" } }), /standard.sha/);
 assert.throws(() => validateQualityMetrics({ ...report, metrics: { coverage: null } }), /no puede ser null/);
@@ -101,17 +103,61 @@ assert.throws(() => validateQualityMetrics({
   }]
 }), /gates\[0\]\.evidence\[0\]\.extraField no está permitido/);
 
-// Extensibilidad de metrics: claves dinámicas válidas (planas, anidadas, guiones y guiones bajos)
-const dynamicMetricsReport = {
-  ...report,
-  metrics: {
-    custom_metric: 42,
-    "suite-performance": {
-      "execution-time_ms": 1250,
-      memory_mb: 256.5
+// Extensibilidad y nombres válidos de metrics (raíz y anidados)
+const validMetricNames = [
+  "coverage",
+  "test_count",
+  "test-count",
+  "test1",
+  "TestMetric",
+  "custom_metric",
+  "suite-performance",
+  "CamelCase"
+];
+
+for (const name of validMetricNames) {
+  const dynamicMetricsReport = {
+    ...report,
+    metrics: {
+      [name]: 42,
+      nestedContainer: {
+        [name]: 100
+      }
     }
-  }
-};
-assert.doesNotThrow(() => validateQualityMetrics(dynamicMetricsReport), "metrics debe permitir claves dinámicas válidas");
+  };
+  assert.doesNotThrow(
+    () => validateQualityMetrics(dynamicMetricsReport),
+    `metrics debe aceptar el nombre válido "${name}" en raíz y anidado`
+  );
+}
+
+// Rechazo determinista de nombres inválidos en metrics (raíz y anidados)
+const invalidMetricNames = [
+  "1test",
+  "_test",
+  "-test",
+  "test.value",
+  "test value",
+  "test/value",
+  "test:value",
+  "área",
+  ""
+];
+
+for (const name of invalidMetricNames) {
+  // En raíz de metrics
+  assert.throws(
+    () => validateQualityMetrics({ ...report, metrics: { [name]: 10 } }),
+    /no es válido/,
+    `metrics debe rechazar el nombre inválido "${name}" en la raíz`
+  );
+
+  // En nivel anidado
+  assert.throws(
+    () => validateQualityMetrics({ ...report, metrics: { validGroup: { [name]: 10 } } }),
+    /no es válido/,
+    `metrics debe rechazar el nombre inválido "${name}" en nivel anidado`
+  );
+}
 
 console.log("Quality metrics contract válido.");
