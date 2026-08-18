@@ -45,7 +45,7 @@ Los workflows compartidos deben consumirse mediante una versión estable o un co
 
 ## Ejemplo de consumo Node.js
 
-En el repositorio consumidor, crea un workflow como este y sustituye `<COMMIT_SHA>` por el SHA estable de esta workflow:
+En el repositorio consumidor, crea un workflow como este y sustituye `<COMMIT_SHA>` por el SHA estable de este workflow (utilizado también en `standard-sha` junto con la versión en `standard-version`):
 
 ```yaml
 name: Quality
@@ -59,6 +59,8 @@ jobs:
   quality:
     uses: AlexFrigenti/project-quality/.github/workflows/node-quality.yml@<COMMIT_SHA>
     with:
+      standard-version: v1.1.0
+      standard-sha: <COMMIT_SHA>
       install-command: npm ci
       lint-command: npm run lint
       typecheck-command: npm run typecheck
@@ -87,6 +89,8 @@ jobs:
   quality:
     uses: AlexFrigenti/project-quality/.github/workflows/static-quality.yml@<COMMIT_SHA>
     with:
+      standard-version: v1.1.0
+      standard-sha: <COMMIT_SHA>
       validation-command: node scripts/validate-preview.mjs
       smoke-command: node scripts/smoke-preview.mjs
 ```
