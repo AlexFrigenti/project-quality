@@ -1,10 +1,15 @@
 import assert from "node:assert/strict";
 import { mkdtemp, readFile, rm, writeFile, access } from "node:fs/promises";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 import { tmpdir } from "node:os";
 import { constants } from "node:fs";
+import { execFile } from "node:child_process";
+import { promisify } from "node:util";
 import { validateDashboard } from "./validate-dashboard.mjs";
 import { assembleDashboard } from "./assemble-dashboard.mjs";
+
+const execFileAsync = promisify(execFile);
+const validateScriptPath = resolve("scripts/validate-dashboard.mjs");
 
 console.log("Iniciando pruebas de validación y ensamblado del dashboard...");
 
@@ -280,6 +285,56 @@ try {
   }
 } finally {
   await rm(tempDir, { recursive: true, force: true });
+}
+
+// -------------------------------------------------------------
+// 3. Pruebas de regresión CLI para validate-dashboard.mjs
+// -------------------------------------------------------------
+
+const cliTempDir = await mkdtemp(join(tmpdir(), "test-cli-validate-"));
+try {
+  const { mkdir } = await import("node:fs/promises");
+  const siteDir = join(cliTempDir, "site");
+  await mkdir(siteDir, { recursive: true });
+
+  const valid = buildValidDashboard();
+  await writeFile(join(siteDir, "data.json"), JSON.stringify(valid, null, 2) + "\n", "utf8");
+
+  // 3.1. CLI sin argumentos (debe resolver site/data.json por defecto)
+  {
+    const { stdout } = await execFileAsync("node", [validateScriptPath], { cwd: cliTempDir });
+    assert.match(stdout, /Dashboard válido: 4 repositorios\./);
+  }
+
+  // 3.2. CLI con ruta explícita
+  {
+    const customDir = join(cliTempDir, "custom");
+    await mkdir(customDir, { recursive: true });
+    await writeFile(join(customDir, "custom-data.json"), JSON.stringify(valid, null, 2) + "\n", "utf8");
+
+    const { stdout } = await execFileAsync("node", [validateScriptPath, "custom/custom-data.json"], { cwd: cliTempDir });
+    assert.match(stdout, /Dashboard válido: 4 repositorios\./);
+  }
+
+  // 3.3. CLI sin argumentos cuando no existe site/data.json
+  {
+    const emptyTempDir = await mkdtemp(join(tmpdir(), "test-cli-empty-"));
+    try {
+      await assert.rejects(
+        () => execFileAsync("node", [validateScriptPath], { cwd: emptyTempDir }),
+        (err) => {
+          assert.equal(err.code, 1);
+          assert.match(err.stderr || err.stdout || err.message, /site[\\\/]data\.json/);
+          return true;
+        },
+        "Debe fallar con exit code 1 indicando que site/data.json no existe"
+      );
+    } finally {
+      await rm(emptyTempDir, { recursive: true, force: true });
+    }
+  }
+} finally {
+  await rm(cliTempDir, { recursive: true, force: true });
 }
 
 console.log("Pruebas de validación y ensamblado del dashboard válidas.");
