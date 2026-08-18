@@ -117,9 +117,11 @@ function validateQuality(quality, path) {
     sha(quality.commitSha, path + ".commitSha");
     date(quality.validatedAt, path + ".validatedAt");
     if (!CONCLUSIONS.has(quality.conclusion)) fail(path + ".conclusion no es válida");
+    if (quality.gates.length === 0) fail(path + ".gates actual debe contener al menos un gate");
     if ("message" in quality || "currentHeadSha" in quality) fail(path + " actual contiene campos pendientes");
   } else {
     text(quality.message, path + ".message", 200);
+    if (quality.gates.length !== 0) fail(path + ".gates no puede contener gates en estado " + quality.status);
     if ("commitSha" in quality || "validatedAt" in quality || "conclusion" in quality) {
       fail(path + " pendiente no puede contener una validación actual");
     }
