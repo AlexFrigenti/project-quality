@@ -85,4 +85,33 @@ assert.ok(schema.$defs.gate.properties.status.enum.includes("unknown"));
 assert.throws(() => validateQualityMetrics({ ...report, standard: { ...report.standard, sha: "invalid" } }), /standard.sha/);
 assert.throws(() => validateQualityMetrics({ ...report, metrics: { coverage: null } }), /no puede ser null/);
 
+// Regresiones: rechazo de propiedades desconocidas en los 7 objetos cerrados
+assert.throws(() => validateQualityMetrics({ ...report, extraField: "invalido" }), /report\.extraField no está permitido/);
+assert.throws(() => validateQualityMetrics({ ...report, project: { ...report.project, extraField: "invalido" } }), /project\.extraField no está permitido/);
+assert.throws(() => validateQualityMetrics({ ...report, commit: { ...report.commit, extraField: "invalido" } }), /commit\.extraField no está permitido/);
+assert.throws(() => validateQualityMetrics({ ...report, run: { ...report.run, extraField: "invalido" } }), /run\.extraField no está permitido/);
+assert.throws(() => validateQualityMetrics({ ...report, standard: { ...report.standard, extraField: "invalido" } }), /standard\.extraField no está permitido/);
+assert.throws(() => validateQualityMetrics({ ...report, gates: [{ ...report.gates[0], extraField: "invalido" }] }), /gates\[0\]\.extraField no está permitido/);
+assert.throws(() => validateQualityMetrics({ ...report, evidence: [{ ...report.evidence[0], extraField: "invalido" }] }), /evidence\[0\]\.extraField no está permitido/);
+assert.throws(() => validateQualityMetrics({
+  ...report,
+  gates: [{
+    ...report.gates[0],
+    evidence: [{ ...report.gates[0].evidence[0], extraField: "invalido" }]
+  }]
+}), /gates\[0\]\.evidence\[0\]\.extraField no está permitido/);
+
+// Extensibilidad de metrics: claves dinámicas válidas (planas, anidadas, guiones y guiones bajos)
+const dynamicMetricsReport = {
+  ...report,
+  metrics: {
+    custom_metric: 42,
+    "suite-performance": {
+      "execution-time_ms": 1250,
+      memory_mb: 256.5
+    }
+  }
+};
+assert.doesNotThrow(() => validateQualityMetrics(dynamicMetricsReport), "metrics debe permitir claves dinámicas válidas");
+
 console.log("Quality metrics contract válido.");

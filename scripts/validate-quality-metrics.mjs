@@ -8,6 +8,14 @@ const CONCLUSIONS = new Set(["passed", "failed", "unknown"]);
 const EVIDENCE_KINDS = new Set(["workflow-run", "workflow-step", "artifact", "repository"]);
 const TOKEN_PATTERN = /(gh[pousr]_[A-Za-z0-9_]+|github_pat_[A-Za-z0-9_]+|Bearer\s+[A-Za-z0-9._-]+)/i;
 
+const ROOT_KEYS = new Set(["schemaVersion", "project", "commit", "run", "standard", "conclusion", "gates", "metrics", "evidence"]);
+const PROJECT_KEYS = new Set(["id", "name", "repository", "kind"]);
+const COMMIT_KEYS = new Set(["sha", "ref", "branch", "event"]);
+const RUN_KEYS = new Set(["workflow", "id", "attempt", "startedAt", "completedAt", "url"]);
+const STANDARD_KEYS = new Set(["version", "sha"]);
+const GATE_KEYS = new Set(["id", "label", "applicability", "status", "details", "evidence"]);
+const EVIDENCE_KEYS = new Set(["kind", "label", "url"]);
+
 function fail(message) {
   throw new Error(message);
 }
@@ -15,6 +23,12 @@ function fail(message) {
 function ensureObject(value, path) {
   if (value === null || typeof value !== "object" || Array.isArray(value)) {
     fail(path + " debe ser un objeto");
+  }
+}
+
+function keys(value, allowed, path) {
+  for (const key of Object.keys(value)) {
+    if (!allowed.has(key)) fail(path + "." + key + " no está permitido");
   }
 }
 
@@ -46,6 +60,7 @@ function ensureUrl(value, path) {
 
 function ensureEvidence(value, path) {
   ensureObject(value, path);
+  keys(value, EVIDENCE_KEYS, path);
   ensureText(value.kind, path + ".kind");
   if (!EVIDENCE_KINDS.has(value.kind)) fail(path + ".kind no es válido");
   ensureText(value.label, path + ".label");
@@ -86,10 +101,12 @@ function rejectNull(value, path = "report") {
 export function validateQualityMetrics(report) {
   ensureObject(report, "report");
   rejectNull(report);
+  keys(report, ROOT_KEYS, "report");
 
   if (report.schemaVersion !== 1) fail("schemaVersion debe ser 1");
 
   ensureObject(report.project, "project");
+  keys(report.project, PROJECT_KEYS, "project");
   ensureText(report.project.id, "project.id");
   if (!/^[a-z0-9][a-z0-9-]*$/.test(report.project.id)) fail("project.id no es válido");
   ensureText(report.project.name, "project.name");
@@ -98,12 +115,14 @@ export function validateQualityMetrics(report) {
   if (!["node", "static"].includes(report.project.kind)) fail("project.kind no es válido");
 
   ensureObject(report.commit, "commit");
+  keys(report.commit, COMMIT_KEYS, "commit");
   ensureSha(report.commit.sha, "commit.sha");
   ensureText(report.commit.ref, "commit.ref");
   ensureText(report.commit.branch, "commit.branch");
   ensureText(report.commit.event, "commit.event");
 
   ensureObject(report.run, "run");
+  keys(report.run, RUN_KEYS, "run");
   ensureText(report.run.workflow, "run.workflow");
   if (!Number.isInteger(report.run.id) || report.run.id < 1) fail("run.id no es válido");
   if (!Number.isInteger(report.run.attempt) || report.run.attempt < 1) fail("run.attempt no es válido");
@@ -112,6 +131,7 @@ export function validateQualityMetrics(report) {
   ensureUrl(report.run.url, "run.url");
 
   ensureObject(report.standard, "standard");
+  keys(report.standard, STANDARD_KEYS, "standard");
   ensureText(report.standard.version, "standard.version");
   ensureSha(report.standard.sha, "standard.sha");
 
@@ -120,6 +140,7 @@ export function validateQualityMetrics(report) {
   report.gates.forEach((gate, index) => {
     const path = "gates[" + index + "]";
     ensureObject(gate, path);
+    keys(gate, GATE_KEYS, path);
     ensureText(gate.id, path + ".id");
     if (!/^[a-z0-9][a-z0-9-]*$/.test(gate.id)) fail(path + ".id no es válido");
     ensureText(gate.label, path + ".label");
