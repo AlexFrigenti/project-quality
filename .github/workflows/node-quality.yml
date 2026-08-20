@@ -43,6 +43,11 @@ on:
         description: Unit or deterministic test command
         required: true
         type: string
+      test-results-file:
+        description: Optional test diagnostics file to preserve as an artifact
+        required: false
+        type: string
+        default: ""
       coverage-command:
         description: Optional coverage command
         required: false
@@ -120,6 +125,14 @@ jobs:
         id: tests
         run: ${{ inputs.test-command }}
 
+      - name: Upload unit test diagnostics
+        if: ${{ always() && inputs.test-results-file != '' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: unit-test-diagnostics
+          path: ${{ inputs.test-results-file }}
+          if-no-files-found: warn
+
       - name: Coverage
         id: coverage
         if: ${{ inputs.coverage-command != '' }}
@@ -139,7 +152,6 @@ jobs:
         id: smoke
         if: ${{ inputs.smoke-command != '' }}
         run: ${{ inputs.smoke-command }}
-
 
       - name: Additional metrics
         id: metrics
