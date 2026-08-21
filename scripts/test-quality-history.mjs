@@ -62,6 +62,27 @@ assert.equal(first.repositories.find((repo) => repo.id === "gestor-autonomo").qu
 assert.equal(/url|token|Bearer/i.test(JSON.stringify(first)), false);
 assert.throws(() => validateQualityHistory({ ...first, unexpected: true }), /no está permitido/);
 
+// Estado global del proceso: process.overall debe reflejar report.overall,
+// no el estado del workflow, que solo es uno de sus componentes.
+assert.equal(
+  first.repositories.find((repo) => repo.id === "nucleo-preview").process.overall,
+  "warning",
+  "Un repositorio pendiente con workflow en pass debe mantener su estado global warning"
+);
+
+const failedProtection = structuredClone(data);
+failedProtection.repositories[0].overall = "fail";
+failedProtection.repositories[0].governance = { ruleset: { status: "fail" } };
+failedProtection.repositories[0].checks = [{ id: "main-protection", status: "fail" }];
+const failedSnapshot = buildQualityHistorySnapshot(failedProtection, { now: new Date("2026-08-13T12:05:00.000Z"), dashboardCommitSha: dashboardSha });
+assert.equal(
+  failedSnapshot.repositories[0].process.overall,
+  "fail",
+  "El estado global del histórico debe reflejar report.overall aunque el workflow esté en pass"
+);
+assert.equal(failedSnapshot.repositories[0].process.mainProtection, "fail");
+assert.equal(failedSnapshot.repositories[0].process.workflow, "pass");
+
 const withUrlTextInDetails = structuredClone(first);
 withUrlTextInDetails.repositories[0].quality.gates[0].details = "url: no requerida para el gate";
 assert.doesNotThrow(() => validateQualityHistory(withUrlTextInDetails));

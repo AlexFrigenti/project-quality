@@ -62,7 +62,7 @@ function processStatus(value) {
 
 function normalizeProcess(report) {
   return {
-    overall: processStatus(report.workflow?.status),
+    overall: processStatus(report.overall),
     mainProtection: processStatus(report.governance?.ruleset?.status),
     workflow: processStatus(report.workflow?.status),
     checks: (report.checks || []).map((check) => ({
