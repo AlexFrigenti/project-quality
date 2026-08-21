@@ -38,10 +38,11 @@ async function request(path) {
   }
 }
 
-async function readArtifactJson(artifact, repository) {
+export async function readArtifactJson(artifact, repository, deps = {}) {
+  const fetchImpl = deps.fetch || fetch;
   const archiveUrl = artifact.archive_download_url
     || apiUrl("/repos/" + repository + "/actions/artifacts/" + artifact.id + "/zip");
-  const response = await fetch(archiveUrl, { headers });
+  const response = await fetchImpl(archiveUrl, { headers });
   if (!response.ok) throw new Error("No se pudo descargar el artifact.");
 
   const bytes = Buffer.from(await response.arrayBuffer());
@@ -225,20 +226,46 @@ function unavailableQualityEvidence(message, currentCommitSha) {
   };
 }
 
+const RUN_CONCLUSION_CONCLUSIONS = new Map([
+  ["success", "passed"],
+  ["failure", "failed"]
+]);
+
+function candidateRejection(summary, run, { defaultBranch, currentCommitSha }) {
+  if (summary.commit.sha !== currentCommitSha) return "un informe corresponde a otro commit";
+  if (summary.commit.branch !== defaultBranch) return "un informe no pertenece a la rama estable";
+  if (summary.run.id !== run.id) return "un informe corresponde a otra ejecución";
+  if (summary.run.attempt !== run.run_attempt) {
+    return "un informe corresponde al intento " + summary.run.attempt + " pero la ejecución terminó en el intento " + run.run_attempt;
+  }
+  const expected = RUN_CONCLUSION_CONCLUSIONS.get(run.conclusion);
+  if (!expected) {
+    return "la ejecución terminó con conclusión " + (run.conclusion || "sin conclusión") + " y no constituye evidencia válida";
+  }
+  if (summary.conclusion !== expected) {
+    return "la conclusión del informe (" + summary.conclusion + ") contradice la conclusión real de la ejecución (" + run.conclusion + ")";
+  }
+  return null;
+}
+
 export async function collectQualityEvidence({
   repository,
   defaultBranch = "main",
   currentCommitSha,
   workflowFile = "quality.yml",
-  exposeLinks = false
-}) {
+  exposeLinks = false,
+  deps = {}
+} = {}) {
+  const fetchImpl = deps.fetch || ((path) => request(path));
+  const readArtifact = deps.readArtifact || ((artifact, targetRepository) => readArtifactJson(artifact, targetRepository));
+
   if (!currentCommitSha) {
     return unavailableQualityEvidence("No se pudo resolver el HEAD actual de la rama estable.", currentCommitSha);
   }
 
   const runsPath = "/repos/" + repository + "/actions/workflows/" + encodeURIComponent(workflowFile)
     + "/runs?branch=" + encodeURIComponent(defaultBranch) + "&per_page=50";
-  const runsResponse = await request(runsPath);
+  const runsResponse = await fetchImpl(runsPath);
   if (!runsResponse.ok) {
     return unavailableQualityEvidence(
       "No se pudo consultar el historial de Actions.",
@@ -250,22 +277,34 @@ export async function collectQualityEvidence({
     .filter((run) => run.status === "completed" && run.head_sha === currentCommitSha)
     .sort((left, right) => Date.parse(right.created_at || "") - Date.parse(left.created_at || ""));
 
+  const causes = [];
   for (const run of candidates) {
-    const artifactsResponse = await request("/repos/" + repository + "/actions/runs/" + run.id + "/artifacts?per_page=100");
-    if (!artifactsResponse.ok) continue;
+    const artifactsResponse = await fetchImpl("/repos/" + repository + "/actions/runs/" + run.id + "/artifacts?per_page=100");
+    if (!artifactsResponse.ok) {
+      causes.push("no se pudieron consultar los artifacts de una ejecución del commit actual");
+      continue;
+    }
 
     const artifact = (artifactsResponse.data?.artifacts || [])
       .find((item) => item.name === "quality-metrics" && item.expired !== true);
-    if (!artifact) continue;
+    if (!artifact) {
+      causes.push("una ejecución del commit actual no tiene un artifact quality-metrics disponible");
+      continue;
+    }
 
     try {
-      const parsed = await readArtifactJson(artifact, repository);
-      if (parsed?.project?.repository !== repository) continue;
+      const parsed = await readArtifact(artifact, repository);
+      if (parsed?.project?.repository !== repository) {
+        causes.push("un artifact pertenece a otro repositorio");
+        continue;
+      }
       const summary = buildQualitySummary(parsed, { exposeLinks });
 
-      if (summary.commit.sha !== currentCommitSha) continue;
-      if (summary.commit.branch !== defaultBranch) continue;
-      if (summary.run.id !== run.id) continue;
+      const rejection = candidateRejection(summary, run, { defaultBranch, currentCommitSha });
+      if (rejection) {
+        causes.push(rejection);
+        continue;
+      }
 
       return {
         status: "current",
@@ -280,9 +319,17 @@ export async function collectQualityEvidence({
         },
         summary
       };
-    } catch {
-      // Un artifact inválido no se incorpora al dashboard.
+    } catch (error) {
+      causes.push("un artifact no pudo leerse o validarse (" + boundedText(error instanceof Error ? error.message : String(error), 120) + ")");
     }
+  }
+
+  if (causes.length > 0) {
+    const aggregated = [...new Set(causes)].join("; ");
+    return unavailableQualityEvidence(
+      boundedText("Evidencia candidata no utilizable para el commit actual: " + aggregated + ".", 200),
+      currentCommitSha
+    );
   }
 
   return pendingQualityEvidence(currentCommitSha);

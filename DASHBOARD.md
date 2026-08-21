@@ -28,7 +28,7 @@ Además del proceso, el dashboard consume el artifact real `quality-metrics` de 
 - commit y fecha de validación;
 - enlace a la ejecución cuando el repositorio es público.
 
-Si todavía no existe evidencia para ese commit, el panel muestra `Evidencia pendiente para el commit actual`. Eso no se interpreta automáticamente como un fallo de calidad.
+Si todavía no existe evidencia para ese commit, el panel muestra `Evidencia pendiente para el commit actual`. Eso no se interpreta automáticamente como un fallo de calidad. Cuando existe evidencia candidata pero no puede utilizarse —artifact ilegible, informe que contradice la conclusión real del workflow o de otro intento— el panel lo distingue como evidencia no utilizable e indica la causa, sin sobrestimar la calidad.
 
 ## Acceso al repositorio privado
 
