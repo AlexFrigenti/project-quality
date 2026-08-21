@@ -19,6 +19,7 @@ quality-snapshot-<sha256>.json
 El identificador se calcula a partir del estado normalizado de los proyectos, sus gates, sus métricas y el estándar utilizado. Por tanto:
 
 - una reejecución del mismo estado no crea otro asset;
+- si una ejecución vuelve a observar un estado ya persistido, el índice conserva esa identidad una única vez con la fecha de generación más reciente;
 - un nuevo commit validado de cualquier `main` puede generar un snapshot nuevo;
 - una ejecución sin ninguna evidencia actual validada no se incorpora al histórico;
 - un proyecto pendiente puede aparecer dentro de un snapshot, pero nunca se presenta como calidad aprobada.

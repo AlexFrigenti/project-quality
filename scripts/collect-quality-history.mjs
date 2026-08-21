@@ -79,7 +79,10 @@ export function buildHistoryIndex(snapshots, { now = new Date() } = {}) {
   const byId = new Map();
   for (const snapshot of snapshots) {
     validateQualityHistory(snapshot);
-    byId.set(snapshot.id, snapshot);
+    const existing = byId.get(snapshot.id);
+    if (!existing || Date.parse(snapshot.generatedAt) > Date.parse(existing.generatedAt)) {
+      byId.set(snapshot.id, snapshot);
+    }
   }
 
   const ordered = [...byId.values()].sort((left, right) => {
