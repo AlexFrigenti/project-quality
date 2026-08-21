@@ -17,6 +17,13 @@ const expectedNotApplicable = {
   "nucleo-preview": ["Instalación", "Tipos", "Build", "Cobertura", "E2E"]
 };
 
+const expectedQualityChecks = {
+  "gestor-autonomo": "Reusable Node.js quality / Quality gates",
+  nexo: "Reusable Node.js quality / Quality gates",
+  nucleo: "Reusable Node.js quality / Quality gates",
+  "nucleo-preview": "Reusable static quality / Static quality gates"
+};
+
 for (const profileId of expectedProfileIds) {
   const profile = profiles[profileId];
   assert.ok(profile, `El perfil ${profileId} debe existir`);
@@ -26,7 +33,18 @@ for (const profileId of expectedProfileIds) {
     expectedNotApplicable[profileId],
     `El perfil ${profileId} debe tener exactamente las áreas no aplicables esperadas`
   );
+  assert.equal(
+    profile.requiredQualityCheck?.context,
+    expectedQualityChecks[profileId],
+    `El perfil ${profileId} debe declarar el contexto de su quality gate agregado`
+  );
 }
+
+assert.notEqual(
+  profiles["nucleo-preview"].requiredQualityCheck.context,
+  profiles.nucleo.requiredQualityCheck.context,
+  "El perfil estático no debe compartir accidentalmente el contexto Node"
+);
 
 // 3. Verificación de propagación a snapshot histórico y validación de esquema
 const dashboardSha = "0123456789abcdef0123456789abcdef01234567";

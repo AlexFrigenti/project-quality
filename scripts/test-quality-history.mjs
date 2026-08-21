@@ -9,12 +9,12 @@ const gestorSha = "1111111111111111111111111111111111111111";
 const nexoSha = "2222222222222222222222222222222222222222";
 const nucleoSha = "3333333333333333333333333333333333333333";
 
-function currentReport({ id, repository, kind, visibility, sha, metrics, overall = "pass" }) {
+function currentReport({ id, repository, kind, visibility, sha, metrics, overall = "pass", governanceMechanism = "ruleset" }) {
   return {
     repository: { id, fullName: repository, visibility, defaultBranch: "main", headSha: sha },
     profile: { kind, notApplicableAreas: [] },
     overall,
-    governance: { ruleset: { status: "pass" } },
+    governance: { ruleset: { status: "pass", mechanism: governanceMechanism } },
     workflow: { status: "pass" },
     checks: [{ id: "main-protection", status: "pass" }],
     qualityEvidence: {
@@ -38,12 +38,12 @@ const data = {
   repositories: [
     currentReport({ id: "gestor-autonomo", repository: "AlexFrigenti/gestor-autonomo", kind: "node", visibility: "private", sha: gestorSha, metrics: { tests: { total: 10, passed: 10 }, coverage: { lines: 86.4 } } }),
     currentReport({ id: "nexo", repository: "AlexFrigenti/Nexo", kind: "node", visibility: "private", sha: nexoSha, metrics: { tests: { total: 8, passed: 8 } } }),
-    currentReport({ id: "nucleo", repository: "AlexFrigenti/Nucleo", kind: "node", visibility: "public", sha: nucleoSha, metrics: {} }),
+    currentReport({ id: "nucleo", repository: "AlexFrigenti/Nucleo", kind: "node", visibility: "public", sha: nucleoSha, metrics: {}, governanceMechanism: "branch-protection" }),
     {
       repository: { id: "nucleo-preview", fullName: "AlexFrigenti/Nucleo-preview", visibility: "public", headSha: "4444444444444444444444444444444444444444" },
       profile: { kind: "static", notApplicableAreas: ["Build", "Tipos"] },
       overall: "warning",
-      governance: { ruleset: { status: "pass" } },
+      governance: { ruleset: { status: "pass", mechanism: "ruleset" } },
       workflow: { status: "pass" },
       checks: [{ id: "latest-quality-run", status: "pending" }],
       qualityEvidence: { status: "pending", message: "Evidencia pendiente para el commit actual" }
@@ -58,6 +58,8 @@ assert.equal(first.repositories.length, 4);
 assert.equal(first.repositories.find((repo) => repo.id === "nucleo-preview").quality.status, "pending");
 assert.equal(first.repositories.find((repo) => repo.id === "gestor-autonomo").visibility, "private");
 assert.equal(first.repositories.find((repo) => repo.id === "gestor-autonomo").quality.metrics.coverage.lines, 86.4);
+assert.equal(first.repositories.find((repo) => repo.id === "nucleo").process.mainProtection, "pass");
+assert.equal(first.repositories.find((repo) => repo.id === "nucleo").process.mechanism, undefined);
 assert.equal(first.repositories.find((repo) => repo.id === "gestor-autonomo").quality.run, undefined);
 assert.equal(/url|token|Bearer/i.test(JSON.stringify(first)), false);
 assert.throws(() => validateQualityHistory({ ...first, unexpected: true }), /no está permitido/);

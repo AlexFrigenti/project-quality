@@ -183,7 +183,7 @@ Añadir progresivamente:
 
 ### Fase D: bloqueo
 
-Cuando el workflow sea estable, configurar las reglas de `main` para exigir la PR y los checks adecuados. Antes de bloquear, comprobar que los nombres de los checks son estables y que el workflow también funciona para PRs.
+Cuando el workflow sea estable, configurar las reglas de `main` para exigir la PR, el quality gate agregado del perfil y los bloqueos de borrado y force push adecuados. La verificación debe aceptar rulesets o branch protection clásica solo cuando el mecanismo aplica a `main`, permite merge commit, no deja bypasses relevantes y expone información suficiente; una respuesta incompleta o errónea se trata como desconocida, no como protección válida. Antes de bloquear, comprobar que los nombres de los checks son estables y que el workflow también funciona para PRs.
 
 
 ## Flujo de desarrollo asistido por IA
