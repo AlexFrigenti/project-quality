@@ -121,6 +121,19 @@ function normalizeQuality(report) {
   return base;
 }
 
+function normalizeNotApplicableArea(item, repositoryId) {
+  if (typeof item === "string") return boundedText(item, 120);
+  if (!item || typeof item !== "object" || Array.isArray(item)) {
+    throw new Error("Área no aplicable inválida en " + repositoryId + ".");
+  }
+  const area = boundedText(item.area, 120);
+  const reason = boundedText(item.reason, 240);
+  if (!area.trim() || !reason.trim()) {
+    throw new Error("El área no aplicable de " + repositoryId + " debe incluir area y reason.");
+  }
+  return { area, reason };
+}
+
 function normalizeRepository(report) {
   const repository = report.repository || {};
   const profile = report.profile || {};
@@ -130,7 +143,7 @@ function normalizeRepository(report) {
     kind: profile.kind === "static" ? "static" : "node",
     visibility: repository.visibility === "private" ? "private" : "public",
     notApplicableAreas: Array.isArray(profile.notApplicableAreas)
-      ? profile.notApplicableAreas.map((item) => boundedText(item, 120))
+      ? profile.notApplicableAreas.map((item) => normalizeNotApplicableArea(item, repository.id))
       : [],
     process: normalizeProcess(report),
     quality: normalizeQuality(report)

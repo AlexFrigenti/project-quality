@@ -398,6 +398,14 @@
         return "Sin evidencia";
       }
 
+      function notApplicableAreaLabel(item) {
+        return typeof item === "string" ? item : (item && item.area) || "";
+      }
+
+      function notApplicableAreaReason(item) {
+        return typeof item === "string" ? "" : (item && item.reason) || "";
+      }
+
       function flattenMetrics(value, prefix) {
         if (typeof value === "number") return [[prefix, value]];
         if (!value || typeof value !== "object" || Array.isArray(value)) return [];
@@ -686,7 +694,10 @@
             '</li>';
         }).join("") : "";
         const metrics = isCurrent ? renderMetricGroups(quality.metrics || {}) : "";
-        const notApplicable = repository.notApplicableAreas.map((area) => '<li>' + escapeHtml(area) + ' · No aplica</li>').join("");
+        const notApplicable = repository.notApplicableAreas.map((item) => {
+          const reason = notApplicableAreaReason(item);
+          return '<li>' + escapeHtml(notApplicableAreaLabel(item)) + ' · No aplica' + (reason ? ' · ' + escapeHtml(reason) : '') + '</li>';
+        }).join("");
         const qualityDetail = isCurrent
           ? qualityLabel(quality)
           : (quality.message || "Evidencia no disponible.");

@@ -33,7 +33,12 @@ export const profiles = {
     workflowPath: ".github/workflows/quality.yml",
     reusableWorkflow: ".github/workflows/node-quality.yml",
     requiredInputs: ["install-command", "lint-command", "build-command", "test-command"],
-    notApplicableAreas: ["Tipos", "Cobertura", "E2E", "Smoke test"]
+    notApplicableAreas: [
+      { area: "Tipos", reason: "Proyecto de contenido en JavaScript sin TypeScript que mantener." },
+      { area: "Cobertura", reason: "Pruebas deterministas sin infraestructura de cobertura madura que medir." },
+      { area: "E2E", reason: "Contenido sin flujos críticos de navegación que exijan pruebas E2E." },
+      { area: "Smoke test", reason: "Sin artefacto ejecutable de arranque; las validaciones deterministas cubren el contenido." }
+    ]
   },
   nucleo: {
     label: "Núcleo",
@@ -42,7 +47,11 @@ export const profiles = {
     workflowPath: ".github/workflows/quality.yml",
     reusableWorkflow: ".github/workflows/node-quality.yml",
     requiredInputs: ["install-command", "preflight-command", "build-command", "test-command", "smoke-command"],
-    notApplicableAreas: ["Tipos", "Cobertura", "E2E"]
+    notApplicableAreas: [
+      { area: "Tipos", reason: "Juego en JavaScript sin tipado estático; la lógica se cubre con pruebas de estado." },
+      { area: "Cobertura", reason: "Sin infraestructura de cobertura madura; prioriza pruebas de lógica y smoke." },
+      { area: "E2E", reason: "Sin navegación crítica entre páginas; el smoke valida el artefacto generado." }
+    ]
   },
   "nucleo-preview": {
     label: "Núcleo Preview",
@@ -51,7 +60,13 @@ export const profiles = {
     workflowPath: ".github/workflows/quality.yml",
     reusableWorkflow: ".github/workflows/static-quality.yml",
     requiredInputs: ["validation-command"],
-    notApplicableAreas: ["Instalación", "Tipos", "Build", "Cobertura", "E2E"]
+    notApplicableAreas: [
+      { area: "Instalación", reason: "Preview estática sin package.json ni gestor de dependencias." },
+      { area: "Tipos", reason: "JavaScript estático sin tipado estático que comprobar." },
+      { area: "Build", reason: "Los recursos publicados son el artefacto; no existe proceso de build." },
+      { area: "Cobertura", reason: "Sin tests de Node ni infraestructura de cobertura que medir." },
+      { area: "E2E", reason: "El validador determinista de contratos sustituye a las pruebas E2E." }
+    ]
   }
 };
 

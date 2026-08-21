@@ -207,4 +207,35 @@ const baseProcess = {
   assert.ok(!rendered.includes('<span class="fact-value">Pendiente</span>'), "En estado de proceso pending NO debe aparecer 'Pendiente'");
 }
 
+// 6. Áreas No aplica con explicación (forma enriquecida) y compatibilidad legacy
+{
+  const record = {
+    snapshot: baseSnapshot,
+    repository: {
+      id: "nucleo-preview",
+      notApplicableAreas: [
+        { area: "Instalación", reason: "Preview estática sin package.json ni gestor de dependencias." },
+        "Tipos"
+      ],
+      process: baseProcess,
+      quality: {
+        status: "unavailable",
+        message: "Evidencia no disponible.",
+        gates: [],
+        metrics: {}
+      }
+    }
+  };
+
+  const rendered = renderSnapshot(record);
+  assert.ok(rendered.includes("No aplica por perfil"), "Debe mantenerse la sección 'No aplica por perfil'");
+  assert.ok(
+    rendered.includes("<li>Instalación · No aplica · Preview estática sin package.json ni gestor de dependencias.</li>"),
+    "La forma enriquecida debe renderizar área, marca No aplica y explicación"
+  );
+  assert.ok(rendered.includes("<li>Tipos · No aplica</li>"), "La forma legacy debe seguir renderizándose sin explicación");
+  assert.ok(!rendered.includes("[object Object]"), "El HTML generado no debe contener '[object Object]'");
+  assert.ok(!rendered.includes("undefined"), "El HTML generado no debe contener 'undefined'");
+}
+
 console.log("Pruebas de renderizado de histórico válidas.");

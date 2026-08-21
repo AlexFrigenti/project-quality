@@ -46,4 +46,6 @@ El contrato de cada snapshot está definido en [schemas/quality-history.schema.j
 
 Los snapshots y el índice no incluyen URLs, tokens, secretos, variables de entorno, headers, logs ni salidas arbitrarias de comandos. Las referencias a `No aplica` se conservan mediante `applicability: not-applicable` en los gates.
 
+Las exclusiones por perfil (`notApplicableAreas`) conservan el nombre del área y pueden incluir una explicación breve del motivo mediante la forma `{ "area": …, "reason": … }`. Los snapshots históricos que solo contienen el nombre del área (forma legacy) siguen siendo válidos y se muestran sin explicación.
+
 Los repositorios privados solo se consultan durante el workflow con el mecanismo de autenticación ya configurado. GitHub Pages recibe únicamente el índice y los snapshots sanitizados.

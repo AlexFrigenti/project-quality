@@ -190,6 +190,14 @@
       const qualityStatusIcons = { passed: "✓", failed: "×", skipped: "•", "not-applicable": "—", unknown: "?" };
 
       function qualityStatusLabel(status) { return qualityStatusText[status] || qualityStatusText.unknown; }
+
+      function notApplicableAreaLabel(item) {
+        return typeof item === "string" ? item : (item && item.area) || "";
+      }
+
+      function notApplicableAreaReason(item) {
+        return typeof item === "string" ? "" : (item && item.reason) || "";
+      }
       function qualityStatusClass(status) {
         if (status === "passed") return "pass";
         if (status === "failed") return "fail";
@@ -291,7 +299,10 @@
 
         const notApplicable = (report.profile?.notApplicableAreas || []);
         const notApplicableHtml = notApplicable.length
-          ? '<ul class="not-applicable-list">' + notApplicable.map((item) => '<li class="not-applicable-item">' + escapeHtml(item) + ' · No aplica</li>').join("") + '</ul>'
+          ? '<ul class="not-applicable-list">' + notApplicable.map((item) => {
+              const reason = notApplicableAreaReason(item);
+              return '<li class="not-applicable-item">' + escapeHtml(notApplicableAreaLabel(item)) + ' · No aplica' + (reason ? ' · ' + escapeHtml(reason) : '') + '</li>';
+            }).join("") + '</ul>'
           : '';
 
         const runLink = report.qualityRun?.url

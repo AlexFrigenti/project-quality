@@ -135,7 +135,20 @@
         "visibility": { "enum": ["public", "private"] },
         "notApplicableAreas": {
           "type": "array",
-          "items": { "type": "string", "minLength": 1, "maxLength": 120 }
+          "items": {
+            "oneOf": [
+              { "type": "string", "minLength": 1, "maxLength": 120 },
+              {
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["area", "reason"],
+                "properties": {
+                  "area": { "type": "string", "minLength": 1, "maxLength": 120 },
+                  "reason": { "type": "string", "minLength": 1, "maxLength": 240 }
+                }
+              }
+            ]
+          }
         },
         "process": { "$ref": "#/$defs/process" },
         "quality": { "$ref": "#/$defs/quality" }

@@ -9,7 +9,7 @@ console.log("Iniciando pruebas de perfiles de auditoría...");
 const expectedProfileIds = ["gestor-autonomo", "nexo", "nucleo", "nucleo-preview"];
 assert.deepEqual(Object.keys(profiles).sort(), expectedProfileIds.sort(), "Los perfiles de auditoría deben contener exactamente los 4 repositorios gestionados");
 
-// 2. Verificación de notApplicableAreas canónicos
+// 2. Verificación de notApplicableAreas canónicos con su explicación
 const expectedNotApplicable = {
   "gestor-autonomo": [],
   nexo: ["Tipos", "Cobertura", "E2E", "Smoke test"],
@@ -22,7 +22,7 @@ for (const profileId of expectedProfileIds) {
   assert.ok(profile, `El perfil ${profileId} debe existir`);
   assert.ok(Array.isArray(profile.notApplicableAreas), `El perfil ${profileId} debe declarar notApplicableAreas como array`);
   assert.deepEqual(
-    profile.notApplicableAreas,
+    profile.notApplicableAreas.map((item) => item.area),
     expectedNotApplicable[profileId],
     `El perfil ${profileId} debe tener exactamente las áreas no aplicables esperadas`
   );
@@ -109,8 +109,8 @@ assert.equal(snapshot.repositories.length, 4, "El snapshot debe contener 4 repos
 for (const repo of snapshot.repositories) {
   assert.deepEqual(
     repo.notApplicableAreas,
-    expectedNotApplicable[repo.id],
-    `El snapshot debe propagar fielmente notApplicableAreas para ${repo.id}`
+    profiles[repo.id].notApplicableAreas,
+    `El snapshot debe propagar fielmente las áreas no aplicables con su explicación para ${repo.id}`
   );
 }
 
@@ -118,12 +118,17 @@ const isValid = validateQualityHistory(snapshot);
 assert.equal(isValid, true, "El snapshot histórico con los perfiles reales debe ser válido");
 
 // 4. Pruebas defensivas y de robustez
-// 4.1. Verificación de que todos los elementos son cadenas no vacías de longitud válida
+// 4.1. Verificación de la forma enriquecida: área canónica y explicación breve no vacía
 for (const profileId of expectedProfileIds) {
-  for (const [idx, area] of profiles[profileId].notApplicableAreas.entries()) {
-    assert.equal(typeof area, "string", `El área [${idx}] de ${profileId} debe ser un string`);
-    assert.ok(area.trim().length > 0, `El área [${idx}] de ${profileId} no puede estar vacía`);
-    assert.ok(area.length <= 120, `El área [${idx}] de ${profileId} no puede superar 120 caracteres`);
+  for (const [idx, entry] of profiles[profileId].notApplicableAreas.entries()) {
+    assert.equal(typeof entry, "object", `La entrada [${idx}] de ${profileId} debe ser un objeto`);
+    assert.deepEqual(Object.keys(entry).sort(), ["area", "reason"], `La entrada [${idx}] de ${profileId} debe tener exactamente area y reason`);
+    assert.equal(typeof entry.area, "string", `El área [${idx}] de ${profileId} debe ser un string`);
+    assert.ok(entry.area.trim().length > 0, `El área [${idx}] de ${profileId} no puede estar vacía`);
+    assert.ok(entry.area.length <= 120, `El área [${idx}] de ${profileId} no puede superar 120 caracteres`);
+    assert.equal(typeof entry.reason, "string", `La explicación [${idx}] de ${profileId} debe ser un string`);
+    assert.ok(entry.reason.trim().length > 0, `La explicación [${idx}] de ${profileId} no puede estar vacía`);
+    assert.ok(entry.reason.length <= 240, `La explicación [${idx}] de ${profileId} no puede superar 240 caracteres`);
   }
 }
 
@@ -133,5 +138,12 @@ assert.equal(profiles["gestor-autonomo"].notApplicableAreas.length, 0, "gestor-a
 // 4.3. Verificación de que no hay contaminación entre perfiles
 assert.notDeepEqual(profiles.nexo.notApplicableAreas, profiles.nucleo.notApplicableAreas);
 assert.notDeepEqual(profiles.nucleo.notApplicableAreas, profiles["nucleo-preview"].notApplicableAreas);
+
+// 5. Compatibilidad con datos históricos: la forma legacy de strings sigue siendo válida
+const legacySnapshot = structuredClone(snapshot);
+legacySnapshot.repositories.forEach((repo) => {
+  repo.notApplicableAreas = repo.notApplicableAreas.map((item) => item.area);
+});
+assert.doesNotThrow(() => validateQualityHistory(legacySnapshot), "Un snapshot histórico con áreas como strings debe seguir validando");
 
 console.log("Perfiles de auditoría y propagación a histórico válidos.");

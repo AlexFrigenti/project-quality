@@ -123,6 +123,65 @@ unavailableWithNonEmptyGates.repositories[3].quality.message = "Evidencia no dis
 unavailableWithNonEmptyGates.repositories[3].quality.gates = [sampleGate];
 assert.throws(() => validateQualityHistory(unavailableWithNonEmptyGates), /no puede contener gates en estado unavailable/);
 
+// Contrato de notApplicableAreas: forma legacy, forma enriquecida y casos inválidos
+const legacyAreas = structuredClone(first);
+legacyAreas.repositories[0].notApplicableAreas = ["Build", "Tipos"];
+assert.doesNotThrow(() => validateQualityHistory(legacyAreas), "La forma legacy de strings debe seguir validando");
+
+const mixedAreas = structuredClone(first);
+mixedAreas.repositories[0].notApplicableAreas = [
+  { area: "Cobertura", reason: "Sin infraestructura de cobertura madura que medir." },
+  "Tipos"
+];
+assert.doesNotThrow(() => validateQualityHistory(mixedAreas), "Un array mixto de strings y objetos debe validar");
+
+const missingReason = structuredClone(first);
+missingReason.repositories[0].notApplicableAreas = [{ area: "Build" }];
+assert.throws(() => validateQualityHistory(missingReason), /reason debe ser texto no vacío/);
+
+const emptyReason = structuredClone(first);
+emptyReason.repositories[0].notApplicableAreas = [{ area: "Build", reason: "   " }];
+assert.throws(() => validateQualityHistory(emptyReason), /reason debe ser texto no vacío/);
+
+const longReason = structuredClone(first);
+longReason.repositories[0].notApplicableAreas = [{ area: "Build", reason: "r".repeat(241) }];
+assert.throws(() => validateQualityHistory(longReason), /reason supera el límite de longitud/);
+
+const extraKeyInArea = structuredClone(first);
+extraKeyInArea.repositories[0].notApplicableAreas = [{ area: "Build", reason: "Motivo válido.", note: "extra" }];
+assert.throws(() => validateQualityHistory(extraKeyInArea), /note no está permitido/);
+
+// Normalización en persistencia: la explicación sobrevive al snapshot y la inválida se rechaza
+const enrichedData = structuredClone(data);
+enrichedData.repositories[0].profile.notApplicableAreas = [
+  { area: "Cobertura", reason: "Sin infraestructura de cobertura madura que medir." },
+  "Tipos"
+];
+const enrichedSnapshot = buildQualityHistorySnapshot(enrichedData, { now: new Date("2026-08-13T12:05:00.000Z"), dashboardCommitSha: dashboardSha });
+assert.deepEqual(
+  enrichedSnapshot.repositories[0].notApplicableAreas,
+  [
+    { area: "Cobertura", reason: "Sin infraestructura de cobertura madura que medir." },
+    "Tipos"
+  ],
+  "El snapshot debe conservar la forma enriquecida y la legacy sin alterarlas"
+);
+validateQualityHistory(enrichedSnapshot);
+
+const invalidEntryData = structuredClone(data);
+invalidEntryData.repositories[0].profile.notApplicableAreas = [{ area: "Build" }];
+assert.throws(
+  () => buildQualityHistorySnapshot(invalidEntryData, { dashboardCommitSha: dashboardSha }),
+  /debe incluir area y reason/
+);
+
+const invalidTypeData = structuredClone(data);
+invalidTypeData.repositories[0].profile.notApplicableAreas = [42];
+assert.throws(
+  () => buildQualityHistorySnapshot(invalidTypeData, { dashboardCommitSha: dashboardSha }),
+  /Área no aplicable inválida/
+);
+
 const schema = JSON.parse(await readFile("schemas/quality-history.schema.json", "utf8"));
 assert.equal(schema.properties.schemaVersion.const, 1);
 assert.ok(schema.$defs.quality.required.includes("gates"));
@@ -136,5 +195,15 @@ assert.equal(currentCondition.then?.properties?.gates?.minItems, 1);
 const nonCurrentCondition = schema.$defs.quality.allOf.find((cond) => cond.if?.properties?.status?.enum?.includes("pending"));
 assert.ok(nonCurrentCondition);
 assert.equal(nonCurrentCondition.then?.properties?.gates?.maxItems, 0);
+
+const notApplicableItems = schema.$defs.repository.properties.notApplicableAreas.items;
+assert.ok(Array.isArray(notApplicableItems.oneOf), "notApplicableAreas.items debe admitir ambas formas");
+const legacyItem = notApplicableItems.oneOf.find((item) => item.type === "string");
+assert.equal(legacyItem.maxLength, 120);
+const enrichedItem = notApplicableItems.oneOf.find((item) => item.type === "object");
+assert.deepEqual(enrichedItem.required, ["area", "reason"]);
+assert.equal(enrichedItem.additionalProperties, false);
+assert.equal(enrichedItem.properties.area.maxLength, 120);
+assert.equal(enrichedItem.properties.reason.maxLength, 240);
 
 console.log("Histórico de calidad válido.");

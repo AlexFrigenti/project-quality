@@ -5,6 +5,7 @@ import { tmpdir } from "node:os";
 import { constants } from "node:fs";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
+import vm from "node:vm";
 import { validateDashboard } from "./validate-dashboard.mjs";
 import { assembleDashboard } from "./assemble-dashboard.mjs";
 
@@ -335,6 +336,91 @@ try {
   }
 } finally {
   await rm(cliTempDir, { recursive: true, force: true });
+}
+
+// -------------------------------------------------------------
+// 4. Pruebas de renderizado de evidencia en index.html
+// -------------------------------------------------------------
+
+{
+  const indexHtml = await readFile(resolve("dashboard/index.html"), "utf8");
+  const scriptMatch = indexHtml.match(/<script>([\s\S]*?)<\/script>/);
+  assert.ok(scriptMatch, "index.html debe contener un bloque de script");
+
+  const domStore = {};
+  const mockDocument = {
+    getElementById: (id) => ({
+      set innerHTML(val) {
+        domStore[id] = val;
+      },
+      get innerHTML() {
+        return domStore[id] || "";
+      }
+    })
+  };
+
+  const renderContext = vm.createContext({
+    document: mockDocument,
+    console,
+    Intl,
+    Date,
+    Array,
+    Object,
+    String,
+    Map,
+    Set,
+    Number,
+    Promise,
+    fetch: () => Promise.resolve({ ok: false, status: 404 })
+  });
+
+  vm.runInContext(scriptMatch[1], renderContext);
+
+  const renderQualityEvidence = renderContext.renderQualityEvidence;
+  assert.equal(typeof renderQualityEvidence, "function", "renderQualityEvidence debe estar definida en index.html");
+
+  function evidenceReport(notApplicableAreas) {
+    return {
+      repository: { id: "nucleo-preview", headSha: sampleSha },
+      profile: {
+        id: "nucleo-preview",
+        label: "Núcleo Preview",
+        kind: "static",
+        description: "Preview estático validado.",
+        notApplicableAreas
+      },
+      qualityRun: {},
+      qualityEvidence: {
+        status: "current",
+        validatedCommitSha: sampleSha,
+        summary: {
+          conclusion: "passed",
+          run: { completedAt: "2026-08-18T15:00:00.000Z" },
+          gates: [{ id: "validation", label: "Validación", applicability: "required", status: "passed", details: "Contratos correctos." }],
+          metrics: {}
+        }
+      }
+    };
+  }
+
+  // 4.1. Forma enriquecida: área + No aplica + explicación
+  const enriched = renderQualityEvidence(
+    evidenceReport([
+      { area: "Instalación", reason: "Preview estática sin package.json ni gestor de dependencias." },
+      "Tipos"
+    ])
+  );
+  assert.ok(enriched.includes("No aplica por perfil"), "Debe mantenerse la sección 'No aplica por perfil'");
+  assert.ok(
+    enriched.includes('<li class="not-applicable-item">Instalación · No aplica · Preview estática sin package.json ni gestor de dependencias.</li>'),
+    "La forma enriquecida debe renderizar área, marca No aplica y explicación"
+  );
+  assert.ok(enriched.includes('<li class="not-applicable-item">Tipos · No aplica</li>'), "La forma legacy debe seguir renderizándose sin explicación");
+  assert.ok(!enriched.includes("[object Object]"), "El HTML generado no debe contener '[object Object]'");
+
+  // 4.2. Sin áreas no aplicables: no se muestra la sección
+  const withoutAreas = renderQualityEvidence(evidenceReport([]));
+  assert.ok(!withoutAreas.includes("No aplica por perfil"), "Sin áreas no aplicables no debe mostrarse la sección");
 }
 
 console.log("Pruebas de validación y ensamblado del dashboard válidas.");

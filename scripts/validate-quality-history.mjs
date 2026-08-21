@@ -179,7 +179,17 @@ export function validateQualityHistory(snapshot) {
     if (!new Set(["node", "static"]).has(repository.kind)) fail(path + ".kind no es válido");
     if (!new Set(["public", "private"]).has(repository.visibility)) fail(path + ".visibility no es válida");
     if (!Array.isArray(repository.notApplicableAreas)) fail(path + ".notApplicableAreas debe ser un array");
-    repository.notApplicableAreas.forEach((item, itemIndex) => text(item, path + ".notApplicableAreas[" + itemIndex + "]", 120));
+    repository.notApplicableAreas.forEach((item, itemIndex) => {
+      const itemPath = path + ".notApplicableAreas[" + itemIndex + "]";
+      if (typeof item === "string") {
+        text(item, itemPath, 120);
+        return;
+      }
+      object(item, itemPath);
+      keys(item, new Set(["area", "reason"]), itemPath);
+      text(item.area, itemPath + ".area", 120);
+      text(item.reason, itemPath + ".reason", 240);
+    });
     validateProcess(repository.process, path + ".process");
     validateQuality(repository.quality, path + ".quality");
   });
