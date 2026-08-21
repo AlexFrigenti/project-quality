@@ -87,4 +87,6 @@ Los workflows consumidores de `v1.1.0` ya publican el artifact `quality-metrics`
 4. conserva únicamente campos sanitizados;
 5. omite URLs de ejecuciones y evidencias cuando el repositorio es privado.
 
-Si no encuentra un informe válido para el SHA actual, el dashboard muestra `Evidencia pendiente para el commit actual`.
+Un informe solo se acepta como evidencia actual cuando coincide además con el intento (`run_attempt`) de la ejecución y su conclusión es coherente con la conclusión real del workflow en GitHub: `success` solo admite informes `passed`, y `failure` solo informes `failed`. Cualquier otra combinación, incluidas ejecuciones canceladas o expiradas por tiempo, no constituye evidencia válida. Un intento anterior tras un re-run nunca se consume como evidencia del estado final.
+
+Si no existe ninguna ejecución completada para el SHA actual, el dashboard muestra `Evidencia pendiente para el commit actual`. La ejecución completada más reciente de ese SHA es autoritativa: si su artifact no puede utilizarse (descarga, descompresión, parsing, validación, falta del artifact o contradicción con GitHub), el estado es explícitamente no utilizable con su causa, sin sustituirlo por ejecuciones anteriores del mismo SHA ni representarlo como una ausencia inocua de evidencia.

@@ -324,7 +324,7 @@
         const link = report.repository.url ? '<a class="project-link" href="' + escapeHtml(report.repository.url) + '" target="_blank" rel="noreferrer">Abrir repositorio →</a>' : "";
         const historyLink = '<a class="project-link" href="./history.html?project=' + encodeURIComponent(report.repository.id) + '">Ver evolución →</a>';
         const issues = (report.issues || []).length ? '<ul class="issues">' + report.issues.map((issue) => '<li>' + escapeHtml(issue) + '</li>').join("") + '</ul>' : "";
-        const latestRun = evidence.status === "current" ? statusLabel(run.status) : evidence.status === "pending" ? "Pendiente" : "Sin evidencia";
+        const latestRun = evidence.status === "current" ? statusLabel(run.status) : evidence.status === "pending" ? "Pendiente" : "Sin evidencia utilizable";
         return [
           '<article class="project ' + escapeHtml(status) + '">',
           '<div class="project-top"><div><h3 class="project-name">' + escapeHtml(report.profile.label) + '</h3><div class="project-kind">' + escapeHtml(report.profile.kind) + ' · ' + escapeHtml(visibility) + '</div></div>',
