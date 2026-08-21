@@ -248,6 +248,42 @@ function candidateRejection(summary, run, { defaultBranch, currentCommitSha }) {
   return null;
 }
 
+async function evaluateLatestRun(run, { repository, defaultBranch, currentCommitSha, exposeLinks, fetchImpl, readArtifact }) {
+  const artifactsResponse = await fetchImpl("/repos/" + repository + "/actions/runs/" + run.id + "/artifacts?per_page=100");
+  if (!artifactsResponse.ok) {
+    return { cause: "no se pudieron consultar los artifacts de la ejecución más reciente del commit actual" };
+  }
+
+  const artifact = (artifactsResponse.data?.artifacts || [])
+    .find((item) => item.name === "quality-metrics" && item.expired !== true);
+  if (!artifact) {
+    return { cause: "la ejecución más reciente del commit actual no tiene un artifact quality-metrics disponible" };
+  }
+
+  let parsed;
+  try {
+    parsed = await readArtifact(artifact, repository);
+  } catch (error) {
+    return { cause: "el artifact no pudo leerse (" + boundedText(error instanceof Error ? error.message : String(error), 120) + ")" };
+  }
+
+  if (parsed?.project?.repository !== repository) {
+    return { cause: "el artifact pertenece a otro repositorio" };
+  }
+
+  let summary;
+  try {
+    summary = buildQualitySummary(parsed, { exposeLinks });
+  } catch (error) {
+    return { cause: "el informe viola el contrato (" + boundedText(error instanceof Error ? error.message : String(error), 120) + ")" };
+  }
+
+  const rejection = candidateRejection(summary, run, { defaultBranch, currentCommitSha });
+  if (rejection) return { cause: rejection };
+
+  return { artifact, summary };
+}
+
 export async function collectQualityEvidence({
   repository,
   defaultBranch = "main",
@@ -277,60 +313,39 @@ export async function collectQualityEvidence({
     .filter((run) => run.status === "completed" && run.head_sha === currentCommitSha)
     .sort((left, right) => Date.parse(right.created_at || "") - Date.parse(left.created_at || ""));
 
-  const causes = [];
-  for (const run of candidates) {
-    const artifactsResponse = await fetchImpl("/repos/" + repository + "/actions/runs/" + run.id + "/artifacts?per_page=100");
-    if (!artifactsResponse.ok) {
-      causes.push("no se pudieron consultar los artifacts de una ejecución del commit actual");
-      continue;
-    }
-
-    const artifact = (artifactsResponse.data?.artifacts || [])
-      .find((item) => item.name === "quality-metrics" && item.expired !== true);
-    if (!artifact) {
-      causes.push("una ejecución del commit actual no tiene un artifact quality-metrics disponible");
-      continue;
-    }
-
-    try {
-      const parsed = await readArtifact(artifact, repository);
-      if (parsed?.project?.repository !== repository) {
-        causes.push("un artifact pertenece a otro repositorio");
-        continue;
-      }
-      const summary = buildQualitySummary(parsed, { exposeLinks });
-
-      const rejection = candidateRejection(summary, run, { defaultBranch, currentCommitSha });
-      if (rejection) {
-        causes.push(rejection);
-        continue;
-      }
-
-      return {
-        status: "current",
-        message: "Evidencia correspondiente exactamente al HEAD actual de la rama estable.",
-        currentCommitSha,
-        validatedCommitSha: summary.commit.sha,
-        artifact: {
-          id: artifact.id,
-          name: artifact.name,
-          createdAt: artifact.created_at || null,
-          expiresAt: artifact.expires_at || null
-        },
-        summary
-      };
-    } catch (error) {
-      causes.push("un artifact no pudo leerse o validarse (" + boundedText(error instanceof Error ? error.message : String(error), 120) + ")");
-    }
+  const latestRun = candidates[0];
+  if (!latestRun) {
+    return pendingQualityEvidence(currentCommitSha);
   }
 
-  if (causes.length > 0) {
-    const aggregated = [...new Set(causes)].join("; ");
-    return unavailableQualityEvidence(
-      boundedText("Evidencia candidata no utilizable para el commit actual: " + aggregated + ".", 200),
-      currentCommitSha
-    );
+  const outcome = await evaluateLatestRun(latestRun, {
+    repository,
+    defaultBranch,
+    currentCommitSha,
+    exposeLinks,
+    fetchImpl,
+    readArtifact
+  });
+
+  if (outcome.summary) {
+    const artifact = outcome.artifact;
+    return {
+      status: "current",
+      message: "Evidencia correspondiente exactamente al HEAD actual de la rama estable.",
+      currentCommitSha,
+      validatedCommitSha: outcome.summary.commit.sha,
+      artifact: {
+        id: artifact.id,
+        name: artifact.name,
+        createdAt: artifact.created_at || null,
+        expiresAt: artifact.expires_at || null
+      },
+      summary: outcome.summary
+    };
   }
 
-  return pendingQualityEvidence(currentCommitSha);
+  return unavailableQualityEvidence(
+    boundedText("Evidencia candidata no utilizable para el commit actual: " + outcome.cause + ".", 200),
+    currentCommitSha
+  );
 }

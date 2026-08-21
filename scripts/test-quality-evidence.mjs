@@ -255,9 +255,36 @@ for (const [conclusion, expectedPattern] of [
       908: reportFor({ id: 100, conclusion: "passed" })
     }
   });
-  assert.equal(result.status, "current");
-  assert.equal(result.summary.run.id, 100);
-  assert.equal(result.summary.conclusion, "passed");
+  assert.equal(result.status, "unavailable");
+  assert.equal(result.summary, null);
+  assert.match(result.message, /contradice la conclusión real de la ejecución \(failure\)/);
+}
+
+{
+  const cancelled = runFor({ id: 301, conclusion: "cancelled", attempt: 1, createdAt: "2026-08-13T11:00:00.000Z" });
+  const olderValid = runFor({ id: 100, conclusion: "success", attempt: 1, createdAt: "2026-08-13T10:00:00.000Z" });
+  const result = await collectWith({
+    runs: [cancelled, olderValid],
+    artifactsByRun: { 301: [artifactFor(914)], 100: [artifactFor(908)] },
+    readByArtifactId: {
+      914: reportFor({ id: 301, conclusion: "passed" }),
+      908: reportFor({ id: 100, conclusion: "passed" })
+    }
+  });
+  assert.equal(result.status, "unavailable");
+  assert.match(result.message, /terminó con conclusión cancelled/);
+}
+
+{
+  const withoutArtifact = runFor({ id: 302, conclusion: "success", attempt: 1, createdAt: "2026-08-13T11:00:00.000Z" });
+  const olderValid = runFor({ id: 100, conclusion: "success", attempt: 1, createdAt: "2026-08-13T10:00:00.000Z" });
+  const result = await collectWith({
+    runs: [withoutArtifact, olderValid],
+    artifactsByRun: { 302: [], 100: [artifactFor(908)] },
+    readByArtifactId: { 908: reportFor({ id: 100, conclusion: "passed" }) }
+  });
+  assert.equal(result.status, "unavailable");
+  assert.match(result.message, /no tiene un artifact quality-metrics disponible/);
 }
 
 for (const [label, broken] of [
@@ -272,7 +299,7 @@ for (const [label, broken] of [
   });
   assert.equal(result.status, "unavailable", label);
   assert.equal(result.status !== "pending", true, label);
-  assert.match(result.message, /no pudo leerse o validarse/);
+  assert.match(result.message, /el artifact no pudo leerse \(/);
 }
 
 {
@@ -284,7 +311,7 @@ for (const [label, broken] of [
     readByArtifactId: { 910: invalidReport }
   });
   assert.equal(result.status, "unavailable");
-  assert.match(result.message, /gates\[0\]\.status no es válido/);
+  assert.match(result.message, /el informe viola el contrato \(gates\[0\]\.status no es válido\)/);
 }
 
 {
@@ -307,18 +334,19 @@ for (const [label, broken] of [
 }
 
 {
-  const broken = runFor({ id: 300, conclusion: "failure", attempt: 1, createdAt: "2026-08-13T11:00:00.000Z" });
+  const broken = runFor({ id: 303, conclusion: "success", attempt: 1, createdAt: "2026-08-13T11:00:00.000Z" });
   const olderValid = runFor({ id: 100, conclusion: "success", attempt: 1, createdAt: "2026-08-13T10:00:00.000Z" });
   const result = await collectWith({
     runs: [broken, olderValid],
-    artifactsByRun: { 300: [artifactFor(912)], 100: [artifactFor(913)] },
+    artifactsByRun: { 303: [artifactFor(912)], 100: [artifactFor(913)] },
     readByArtifactId: {
       912: new Error("No se pudo descargar el artifact."),
       913: reportFor({ id: 100, conclusion: "passed" })
     }
   });
-  assert.equal(result.status, "current");
-  assert.equal(result.summary.run.id, 100);
+  assert.equal(result.status, "unavailable");
+  assert.equal(result.summary, null);
+  assert.match(result.message, /el artifact no pudo leerse \(No se pudo descargar el artifact\.\)/);
 }
 
 {

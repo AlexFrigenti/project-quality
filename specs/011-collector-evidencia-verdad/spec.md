@@ -60,11 +60,10 @@ Que GitHub sea la fuente de verdad de la evidencia publicada:
    - `summary.run.attempt === run.run_attempt`;
    - par conclusión válido: `(run.conclusion === "success" && summary.conclusion === "passed") || (run.conclusion === "failure" && summary.conclusion === "failed")`.
 2. Cualquier otra combinación de conclusiones (incluye `cancelled`, `timed_out`, `skipped`, reportes `unknown`) rechaza el candidato con una causa explícita; nunca se publica como evidencia válida.
-3. Los candidatos se evalúan de más reciente a más antiguo; se acepta el primero plenamente consistente (semántica existente conservada).
-4. Si existen candidatos para el SHA actual y ninguno resulta utilizable, el collector devuelve `unavailable` con un mensaje agregado y acotado que enumera las causas detectadas (contradicción de conclusión, intento incorrecto, descarga/descompresión/parsing/validación, artifact ausente o consulta fallida).
-5. Si no existe ningún run completado para el SHA actual, el comportamiento es el actual: `pending`.
-6. Los errores individuales de un candidato no impiden evaluar los restantes.
-7. La firma pública de `collectQualityEvidence`, `pendingQualityEvidence`, `sanitizeQualityMetrics` y `buildQualitySummary` no cambia; la inyección de red/lectura es opcional (`deps`) con valores por defecto de producción.
+3. El run completado más reciente del SHA actual es autoritativo: es el único que se evalúa. No existe retroceso a ejecuciones anteriores completadas del mismo SHA, ni siquiera cuando una anterior sería consistente.
+4. Si el run completado más reciente del SHA actual no resulta utilizable (contradicción de conclusión, intento incorrecto, descarga/descompresión/parsing/validación, falta del artifact o consulta fallida), el collector devuelve `unavailable` con la causa explícita, sin sustituirlo por ejecuciones anteriores.
+5. Si no existe ningún run completado para el SHA actual, el comportamiento es el actual: `pending`. Las ejecuciones en curso no se evalúan ni bloquean.
+6. La firma pública de `collectQualityEvidence`, `pendingQualityEvidence`, `sanitizeQualityMetrics` y `buildQualitySummary` no cambia; la inyección de red/lectura es opcional (`deps`) con valores por defecto de producción.
 
 ## Criterios de aceptación
 
@@ -74,7 +73,7 @@ Que GitHub sea la fuente de verdad de la evidencia publicada:
 - [ ] Par `(success, passed)` sigue produciendo `current` (no sobre-corrección).
 - [ ] Par `(failure, failed)` sigue produciendo `current` con conclusión `failed` (los fallos reales siguen visibles, no se transforman en pendientes).
 - [ ] Descarga fallida, ZIP ilegible, archivo ausente, JSON corrupto e informe que viola el contrato producen `unavailable` con causa (antes: `pending`).
-- [ ] Varios candidatos: uno ilegible y otro consistente produce `current` del consistente.
+- [ ] Run más reciente contradictorio, cancelado, ilegible o sin artifact con un run anterior consistente del mismo SHA: prevalece el más reciente y el resultado es `unavailable` (sin retroceso).
 - [ ] Sin runs completados del SHA: se mantiene `pending`.
 - [ ] Las pruebas usan fixtures deterministas (sin red real) y habrían fallado contra la implementación original.
 - [ ] Suites afectadas en verde; `git diff --check` limpio.
@@ -82,8 +81,8 @@ Que GitHub sea la fuente de verdad de la evidencia publicada:
 ## Casos de error y límites
 
 - Fallo de la API al listar runs: `unavailable` (sin cambio).
-- Fallo de la API al listar artifacts de un run con SHA coincidente: causa registrada; si nadie es utilizable, `unavailable`.
-- Mensaje agregado acotado a 200 caracteres (límite que ya aplica el histórico sanitizado).
+- Fallo de la API al listar artifacts del run más reciente con SHA coincidente: causa registrada; resultado `unavailable`.
+- Mensaje de causa acotado a 200 caracteres (límite que ya aplica el histórico sanitizado).
 - Repositorios privados: sin cambio de sanitización; los mensajes no contienen URLs ni datos sensibles.
 
 ## Decisiones pendientes
@@ -93,4 +92,4 @@ Ninguna abierta. Decisión adoptada: reutilizar el estado `unavailable` existent
 ## Riesgos y restricciones
 
 - Repos auditados cuyos workflows antiguos completaban sin publicar artifact pasarán de `pending` a `unavailable`; es el comportamiento buscado (causa conocida frente a ausencia inocua) pero cambia la etiqueta visible.
-- Con varios runs del mismo SHA, una contradicción en el más reciente no bloquea la aceptación de uno anterior consistente (atribución verificable mediante el enlace del run); queda documentado como limitación.
+- Si el run completado más reciente de un SHA resulta ilegible o contradictorio, el commit se muestra sin evidencia utilizable aunque existan ejecuciones anteriores válidas del mismo SHA: es la consecuencia deliberada de hacer autoritativo el run más reciente. La reejecución o un nuevo push restablecen la evidencia.
