@@ -16,7 +16,7 @@ console.log("Iniciando pruebas de validación y ensamblado del dashboard...");
 const expectedIds = ["gestor-autonomo", "nexo", "nucleo", "nucleo-preview"];
 const sampleSha = "0123456789abcdef0123456789abcdef01234567";
 
-function buildValidRepository(id, { visibility = "public", qualityStatus = "current" } = {}) {
+function buildValidRepository(id, { visibility = "public", qualityStatus = "current", governanceMechanism = "ruleset" } = {}) {
   const isPrivate = visibility === "private";
   return {
     repository: {
@@ -33,7 +33,7 @@ function buildValidRepository(id, { visibility = "public", qualityStatus = "curr
     checks: [
       { id: "default-branch", label: "Rama estable", status: "pass", detail: "La rama por defecto es main." }
     ],
-    governance: { ruleset: { status: "pass" } },
+    governance: { ruleset: { status: "pass", mechanism: governanceMechanism } },
     workflow: { status: "pass" },
     qualityRun: { status: "pass" },
     qualityEvidence: qualityStatus === "current" ? {
@@ -221,7 +221,8 @@ try {
 
     for (const id of expectedIds) {
       const report = buildValidRepository(id, {
-        visibility: ["gestor-autonomo", "nexo"].includes(id) ? "private" : "public"
+        visibility: ["gestor-autonomo", "nexo"].includes(id) ? "private" : "public",
+        governanceMechanism: id === "nucleo-preview" ? "branch-protection" : "ruleset"
       });
       await writeFile(join(reportsDir, `report-${id}.json`), JSON.stringify(report, null, 2) + "\n");
     }
@@ -246,7 +247,13 @@ try {
     );
     assert.equal(data.summary.total, 4);
     assert.equal(data.summary.pass, 4);
+    assert.equal(data.summary.protectedMain, 4);
     assert.equal(data.summary.qualityCurrent, 4);
+    assert.equal(
+      data.repositories.find((report) => report.repository.id === "nucleo-preview").governance.ruleset.mechanism,
+      "branch-protection",
+      "El ensamblado debe conservar el mecanismo de protección sin cambiar el contrato de status"
+    );
 
     // Verificación de archivos generados en outputDir
     const dataContent = JSON.parse(await readFile(join(outputDir, "data.json"), "utf8"));

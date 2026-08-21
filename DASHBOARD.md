@@ -12,13 +12,15 @@ Este repositorio genera un panel estático con la foto actual de calidad técnic
 El workflow `.github/workflows/quality-dashboard.yml` ejecuta una matriz de cuatro auditorías independientes. Cada auditoría comprueba únicamente evidencia real:
 
 - rama por defecto `main`;
-- ruleset activo con PR obligatorio, merge commit, bloqueo de borrado y bloqueo de force push;
+- ruleset activo aplicable o branch protection clásica equivalente con PR obligatorio, bloqueo de borrado, bloqueo de force push/non-fast-forward y merge commit;
+- required status check explícito para el quality gate agregado que declara el perfil, sin confundirlo con cualquier check disponible;
+- ausencia demostrable de bypasses relevantes y respuesta suficiente de GitHub; una consulta incompleta o errónea queda como `unknown`, nunca como protección verde;
 - workflow de calidad existente;
 - consumo del workflow reutilizable en el commit estable de `project-quality`;
 - comandos que el perfil declara como relevantes;
 - última ejecución de calidad sobre la rama principal.
 
-Los proyectos no comparten arquitectura, dependencias ni una lista artificial de checks. `No aplica` no se convierte en fallo y la ausencia de evidencia se muestra como revisión pendiente.
+Los proyectos no comparten arquitectura, dependencias ni una lista artificial de checks. `No aplica` no se convierte en fallo y la ausencia de evidencia se muestra como revisión pendiente. La tarjeta de protección conserva el estado contractual existente y puede indicar si la garantía proviene de rulesets o de branch protection clásica.
 
 Además del proceso, el dashboard consume el artifact real `quality-metrics` de cada workflow. Solo acepta una ejecución completada cuyo SHA coincida exactamente con el HEAD de `main`. El informe se valida contra el contrato, se reduce a campos seguros y se incorpora como:
 

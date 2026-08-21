@@ -2,6 +2,7 @@ import { writeFile } from "node:fs/promises";
 import { pathToFileURL } from "node:url";
 import { resolve } from "node:path";
 import { collectQualityEvidence } from "./collect-quality-evidence.mjs";
+import { evaluateMainProtection } from "./main-protection.mjs";
 
 const API_ROOT = "https://api.github.com";
 
@@ -12,6 +13,7 @@ export const profiles = {
     description: "Aplicación Node.js de referencia con cobertura y E2E.",
     workflowPath: ".github/workflows/quality.yml",
     reusableWorkflow: ".github/workflows/node-quality.yml",
+    requiredQualityCheck: { context: "Reusable Node.js quality / Quality gates" },
     requiredInputs: [
       "install-command",
       "preflight-command",
@@ -32,6 +34,7 @@ export const profiles = {
     description: "Proyecto Node.js de contenido con validaciones deterministas.",
     workflowPath: ".github/workflows/quality.yml",
     reusableWorkflow: ".github/workflows/node-quality.yml",
+    requiredQualityCheck: { context: "Reusable Node.js quality / Quality gates" },
     requiredInputs: ["install-command", "lint-command", "build-command", "test-command"],
     notApplicableAreas: ["Tipos", "Cobertura", "E2E", "Smoke test"]
   },
@@ -41,6 +44,7 @@ export const profiles = {
     description: "Aplicación de juego con build, tests y smoke test de artefactos.",
     workflowPath: ".github/workflows/quality.yml",
     reusableWorkflow: ".github/workflows/node-quality.yml",
+    requiredQualityCheck: { context: "Reusable Node.js quality / Quality gates" },
     requiredInputs: ["install-command", "preflight-command", "build-command", "test-command", "smoke-command"],
     notApplicableAreas: ["Tipos", "Cobertura", "E2E"]
   },
@@ -50,12 +54,13 @@ export const profiles = {
     description: "Preview estático validado sin imponer backend ni arquitectura adicional.",
     workflowPath: ".github/workflows/quality.yml",
     reusableWorkflow: ".github/workflows/static-quality.yml",
+    requiredQualityCheck: { context: "Reusable static quality / Static quality gates" },
     requiredInputs: ["validation-command"],
     notApplicableAreas: ["Instalación", "Tipos", "Build", "Cobertura", "E2E"]
   }
 };
 
-export async function auditRepository({ env = process.env } = {}) {
+export async function auditRepository({ env = process.env, deps = {} } = {}) {
   const repository = env.AUDIT_REPOSITORY;
   const profileId = env.AUDIT_PROFILE;
   const visibility = env.AUDIT_VISIBILITY || "public";
@@ -83,9 +88,22 @@ export async function auditRepository({ env = process.env } = {}) {
     return path.split("/").map((part) => encodeURIComponent(part)).join("/");
   }
 
+  const fetchImpl = deps.fetch || globalThis.fetch;
+
   async function request(path) {
+    if (deps.request) {
+      try {
+        return await deps.request(path);
+      } catch (error) {
+        return {
+          ok: false,
+          status: 0,
+          data: { message: error instanceof Error ? error.message : String(error) }
+        };
+      }
+    }
     try {
-      const response = await fetch(apiPath(path), { headers });
+      const response = await fetchImpl(apiPath(path), { headers });
       let data = null;
       try {
         data = await response.json();
@@ -205,9 +223,13 @@ export async function auditRepository({ env = process.env } = {}) {
   }
 
   const repo = repoResponse.data;
-  report.repository.defaultBranch = repo.default_branch || null;
-  const defaultBranch = repo.default_branch || "main";
-  const branchRefResponse = await request(`/repos/${repository}/git/ref/heads/${encodePath(defaultBranch)}`);
+  const defaultBranch = typeof repo.default_branch === "string" && repo.default_branch.trim() !== ""
+    ? repo.default_branch
+    : null;
+  report.repository.defaultBranch = defaultBranch;
+  const branchRefResponse = defaultBranch
+    ? await request(`/repos/${repository}/git/ref/heads/${encodePath(defaultBranch)}`)
+    : { ok: false, status: 0, data: null };
   const currentCommitSha = branchRefResponse.ok ? branchRefResponse.data?.object?.sha || null : null;
   report.repository.headSha = currentCommitSha;
   report.repository.visibility = repo.visibility || visibility;
@@ -226,55 +248,121 @@ export async function auditRepository({ env = process.env } = {}) {
   );
   if (repo.archived) addIssue(report, "El repositorio está archivado.");
 
-  const rulesetsResponse = await request(`/repos/${repository}/rulesets?includes_parents=true`);
-  let selectedRuleset = null;
+  const rulesetsPath = (page) => `/repos/${repository}/rulesets?includes_parents=true&targets=branch&per_page=100&page=${page}`;
+  const rulesetsResponse = await request(rulesetsPath(1));
+  const rulesets = {
+    status: rulesetsResponse.ok ? "available" : "error",
+    details: [],
+    incomplete: false
+  };
   if (rulesetsResponse.ok && Array.isArray(rulesetsResponse.data)) {
-    const candidates = rulesetsResponse.data.filter((item) => item.target === "branch");
-    for (const candidate of candidates) {
-      const detailResponse = await request(`/repos/${repository}/rulesets/${candidate.id}`);
-      if (!detailResponse.ok) continue;
-      const detail = detailResponse.data;
-      const includesDefault = detail.conditions?.ref_name?.include?.some((ref) => ref === "~DEFAULT_BRANCH" || ref === `refs/heads/${repo.default_branch}`);
-      if (includesDefault) {
-        selectedRuleset = detail;
+    let page = 1;
+    let candidates = rulesetsResponse.data;
+    while (true) {
+      for (const candidate of candidates) {
+        if (candidate.id === undefined || candidate.id === null) {
+          rulesets.incomplete = true;
+          continue;
+        }
+        const detailResponse = await request(`/repos/${repository}/rulesets/${candidate.id}`);
+        if (!detailResponse.ok) {
+          rulesets.incomplete = true;
+          continue;
+        }
+        if (!detailResponse.data || typeof detailResponse.data !== "object" || detailResponse.data.target !== "branch") {
+          rulesets.incomplete = true;
+          continue;
+        }
+        rulesets.details.push(detailResponse.data);
+      }
+
+      if (candidates.length < 100) break;
+      page += 1;
+      if (page > 100) {
+        rulesets.incomplete = true;
         break;
       }
+      const nextResponse = await request(rulesetsPath(page));
+      if (!nextResponse.ok || !Array.isArray(nextResponse.data)) {
+        rulesets.incomplete = true;
+        break;
+      }
+      candidates = nextResponse.data;
     }
+  } else if (rulesetsResponse.ok) {
+    rulesets.status = "error";
   }
 
-  if (!selectedRuleset) {
-    const detail = "No se encontró un ruleset activo que proteja la rama por defecto.";
-    report.governance.ruleset = { status: "fail", name: null, url: null };
-    addCheck(report, "main-protection", "Protección de main", "fail", detail);
-    addIssue(report, detail);
-  } else {
-    const rules = new Set((selectedRuleset.rules || []).map((rule) => rule.type));
-    const pullRequestRule = (selectedRuleset.rules || []).find((rule) => rule.type === "pull_request");
-    const parameters = pullRequestRule?.parameters || {};
-    const mergeMethods = parameters.allowed_merge_methods || [];
-    const validProtection = selectedRuleset.enforcement === "active"
-      && rules.has("deletion")
-      && rules.has("non_fast_forward")
-      && rules.has("pull_request")
-      && parameters.required_approving_review_count === 0
-      && mergeMethods.length === 1
-      && mergeMethods[0] === "merge";
-    const detail = validProtection
-      ? "Ruleset activo: PR obligatorio, merge commit, bloqueo de borrado y force push."
-      : "El ruleset existe, pero requiere revisión de sus protecciones o métodos de merge.";
-    const rulesetUrl = publicUrl ? `${publicUrl}/rules/${selectedRuleset.id}` : null;
-    report.governance.ruleset = {
-      status: validProtection ? "pass" : "fail",
-      name: selectedRuleset.name,
-      url: rulesetUrl,
-      enforcement: selectedRuleset.enforcement,
-      rules: [...rules]
-    };
-    addCheck(report, "main-protection", "Protección de main", validProtection ? "pass" : "fail", detail, rulesetUrl);
-    if (!validProtection) addIssue(report, detail);
+  const branchProtectionPath = defaultBranch
+    ? `/repos/${repository}/branches/${encodePath(defaultBranch)}/protection`
+    : null;
+  const branchProtectionResponse = branchProtectionPath
+    ? await request(branchProtectionPath)
+    : { ok: false, status: 0, data: null };
+  const branchProtection = {
+    status: branchProtectionPath
+      ? branchProtectionResponse.ok ? "available" : branchProtectionResponse.status === 404 ? "absent" : "error"
+      : "error",
+    value: branchProtectionResponse.ok ? branchProtectionResponse.data : null
+  };
+
+  if (branchProtection.status === "available" && branchProtection.value && typeof branchProtection.value === "object") {
+    const value = branchProtection.value;
+    const has = (key) => Object.prototype.hasOwnProperty.call(value, key);
+    let enriched = value;
+
+    if (!has("enforce_admins")) {
+      const adminsResponse = await request(`${branchProtectionPath}/enforce_admins`);
+      if (adminsResponse.ok) enriched = { ...enriched, enforce_admins: adminsResponse.data };
+    }
+    if (!has("required_status_checks")) {
+      const checksResponse = await request(`${branchProtectionPath}/required_status_checks`);
+      if (checksResponse.ok) enriched = { ...enriched, required_status_checks: checksResponse.data };
+    }
+
+    const reviews = enriched.required_pull_request_reviews;
+    if (reviews && typeof reviews === "object" && !Array.isArray(reviews)
+      && !Object.prototype.hasOwnProperty.call(reviews, "bypass_pull_request_allowances")) {
+      const reviewsResponse = await request(`${branchProtectionPath}/required_pull_request_reviews`);
+      if (reviewsResponse.ok && reviewsResponse.data && typeof reviewsResponse.data === "object") {
+        enriched = {
+          ...enriched,
+          required_pull_request_reviews: {
+            ...reviews,
+            bypass_pull_request_allowances: reviewsResponse.data.bypass_pull_request_allowances
+          }
+        };
+      }
+    }
+    branchProtection.value = enriched;
   }
 
-  const workflowResponse = await request(`/repos/${repository}/contents/${encodePath(profile.workflowPath)}?ref=${encodeURIComponent(repo.default_branch || "main")}`);
+  const protection = evaluateMainProtection({
+    profile,
+    repository: repo,
+    defaultBranch,
+    rulesets,
+    branchProtection
+  });
+  const rulesetUrl = protection.mechanism === "ruleset" && publicUrl
+    ? `${publicUrl}/rules`
+    : protection.mechanism === "branch-protection" && publicUrl
+      ? `${publicUrl}/settings/branches`
+      : null;
+  report.governance.ruleset = {
+    status: protection.status,
+    name: protection.name,
+    url: rulesetUrl,
+    mechanism: protection.mechanism,
+    reason: protection.reason,
+    rules: protection.rules
+  };
+  addCheck(report, "main-protection", "Protección de main", protection.status, protection.reason, rulesetUrl);
+  if (protection.status !== "pass") addIssue(report, protection.reason);
+
+  const workflowResponse = defaultBranch
+    ? await request(`/repos/${repository}/contents/${encodePath(profile.workflowPath)}?ref=${encodeURIComponent(defaultBranch)}`)
+    : { ok: false, status: 0, data: null };
   if (!workflowResponse.ok || !workflowResponse.data?.content) {
     const detail = "No se encontró el workflow de calidad esperado.";
     report.workflow.status = "missing";
@@ -302,7 +390,11 @@ export async function auditRepository({ env = process.env } = {}) {
     defaultBranch,
     currentCommitSha,
     workflowFile,
-    exposeLinks: report.repository.visibility !== "private"
+    exposeLinks: report.repository.visibility !== "private",
+    deps: {
+      fetch: request,
+      ...(deps.readArtifact ? { readArtifact: deps.readArtifact } : {})
+    }
   });
   report.qualityEvidence = qualityEvidence;
 
