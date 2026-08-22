@@ -298,7 +298,14 @@ function buildValidDashboard() {
   }
 }
 
-// 1.14b. Las URLs privadas pueden omitirse por completo, no solo ser null
+// 1.14b. Los agregados desconocidos no pueden atravesar el contrato sin recomposición
+{
+  const invalid = buildValidDashboard();
+  invalid.summary.unverifiedCount = 0;
+  assert.throws(() => validateDashboard(invalid), /summary|Métrica|agregado/i);
+}
+
+// 1.14c. Las URLs privadas pueden omitirse por completo, no solo ser null
 {
   const valid = buildValidDashboard();
   const privateReport = valid.repositories[0];
@@ -339,6 +346,19 @@ for (const nestedUrl of ["https://github.com/private-nested-leak", "ftp://privat
   const invalid = buildValidDashboard();
   invalid.repositories[0].qualityRun.status = "fail";
   assert.throws(() => validateDashboard(invalid), /qualityRun/);
+}
+
+// 1.17b. Una ejecución current fallida no puede ser verde aunque falte su check proyectado
+{
+  const invalid = buildValidDashboard();
+  const report = invalid.repositories[0];
+  report.qualityEvidence.summary.conclusion = "failed";
+  report.qualityEvidence.summary.gates[0].status = "failed";
+  report.qualityRun.status = "fail";
+  report.qualityRun.conclusion = "failed";
+  report.overall = "pass";
+  invalid.summary = buildDashboardSummary(invalid.repositories);
+  assert.throws(() => validateDashboard(invalid), /overall|qualityRun|latest-quality-run/i);
 }
 
 // 1.18. La evidencia no utilizable no puede llevar resumen ni convertirse en verde

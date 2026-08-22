@@ -363,8 +363,9 @@ function validateIssues(report, path) {
 
 function expectedOverall(report) {
   if (report.repository.access === "required") return "warning";
-  if (report.checks.some((check) => check.status === "fail")) return "fail";
-  if (report.checks.some((check) => ["warning", "unknown", "pending", "missing"].includes(check.status))) return "warning";
+  if (report.checks.some((check) => check.status === "fail") || report.qualityRun?.status === "fail") return "fail";
+  if (report.checks.some((check) => ["warning", "unknown", "pending", "missing"].includes(check.status))
+    || ["warning", "unknown", "pending", "missing"].includes(report.qualityRun?.status)) return "warning";
   return "pass";
 }
 
@@ -505,6 +506,12 @@ export function validateDashboard(value) {
 
   object(value.summary, "summary");
   const recomputed = buildDashboardSummary(reports);
+  const expectedKeys = Object.keys(recomputed);
+  const declaredKeys = Object.keys(value.summary);
+  assert(
+    declaredKeys.length === expectedKeys.length && expectedKeys.every((key) => Object.prototype.hasOwnProperty.call(value.summary, key)),
+    "summary contiene agregados desconocidos o incompletos"
+  );
   for (const key of Object.keys(recomputed)) {
     assert(Number.isInteger(value.summary[key]) && value.summary[key] >= 0, "Métrica inválida: " + key);
     assert(value.summary[key] === recomputed[key], "La métrica " + key + " no coincide");
