@@ -110,7 +110,8 @@ jobs:
           AUDIT_REPOSITORY: ${{ matrix.repository }}
           AUDIT_PROFILE: ${{ matrix.profile }}
           AUDIT_VISIBILITY: ${{ matrix.visibility }}
-          QUALITY_STANDARD_SHA: e763e13404e52e9e9c2e87d51efaa3c3492dd27c
+          # Canonical v1.1.0 source shared by all consumer workflows.
+          QUALITY_STANDARD_SHA: e192175546e6528b593f48edcac86e8f01af4e13
           OUTPUT_FILE: report-${{ matrix.id }}.json
         run: node scripts/audit-repository.mjs
 
@@ -170,7 +171,8 @@ jobs:
           REPORTS_DIR: audit-reports
           OUTPUT_DIR: site
           STANDARD_RELEASE: v1.1.0
-          STANDARD_SHA: e763e13404e52e9e9c2e87d51efaa3c3492dd27c
+          # Must remain identical to QUALITY_STANDARD_SHA above.
+          STANDARD_SHA: e192175546e6528b593f48edcac86e8f01af4e13
         run: node scripts/assemble-dashboard.mjs
 
       - name: Generate history index
