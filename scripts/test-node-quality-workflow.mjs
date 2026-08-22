@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 
-const workflow = await readFile(".github/workflows/node-quality.yml", "utf8");
+const workflow = (await readFile(".github/workflows/node-quality.yml", "utf8")).replace(/\r\n?/g, "\n");
 
 assert.match(
   workflow,
