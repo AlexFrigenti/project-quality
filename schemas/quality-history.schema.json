@@ -16,7 +16,11 @@
   "properties": {
     "schemaVersion": { "const": 1 },
     "id": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
-    "generatedAt": { "type": "string", "format": "date-time" },
+    "generatedAt": {
+      "type": "string",
+      "format": "date-time",
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(?:\\.\\d+)?(?:Z|[+-]\\d{2}:\\d{2})$"
+    },
     "dashboardCommitSha": { "type": "string", "pattern": "^[0-9a-f]{40}$" },
     "standard": {
       "type": "object",
@@ -40,6 +44,7 @@
         {
           "type": "object",
           "minProperties": 1,
+          "propertyNames": { "pattern": "^[a-zA-Z][a-zA-Z0-9_-]*$" },
           "additionalProperties": { "$ref": "#/$defs/metricValue" }
         }
       ]
@@ -49,12 +54,38 @@
       "additionalProperties": false,
       "required": ["id", "label", "applicability", "status", "details"],
       "properties": {
-        "id": { "type": "string", "pattern": "^[a-z0-9][a-z0-9-]*$" },
+        "id": { "type": "string", "pattern": "^[a-z0-9][a-z0-9-]*$", "maxLength": 80 },
         "label": { "type": "string", "minLength": 1, "maxLength": 160 },
         "applicability": { "enum": ["required", "optional", "not-applicable"] },
         "status": { "enum": ["passed", "failed", "skipped", "not-applicable", "unknown"] },
         "details": { "type": "string", "minLength": 1, "maxLength": 400 }
-      }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "applicability": { "const": "not-applicable" }
+            }
+          },
+          "then": {
+            "properties": {
+              "status": { "const": "not-applicable" }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "applicability": { "enum": ["required", "optional"] }
+            }
+          },
+          "then": {
+            "properties": {
+              "status": { "not": { "const": "not-applicable" } }
+            }
+          }
+        }
+      ]
     },
     "process": {
       "type": "object",
@@ -71,7 +102,7 @@
             "additionalProperties": false,
             "required": ["id", "status"],
             "properties": {
-              "id": { "type": "string", "pattern": "^[a-z0-9][a-z0-9-]*$" },
+              "id": { "type": "string", "pattern": "^[a-z0-9][a-z0-9-]*$", "maxLength": 80 },
               "status": { "enum": ["pass", "warning", "fail", "unknown", "pending", "missing", "not_applicable"] }
             }
           }
@@ -86,12 +117,17 @@
         "status": { "enum": ["current", "pending", "unavailable"] },
         "currentHeadSha": { "type": "string", "pattern": "^[0-9a-f]{40}$" },
         "commitSha": { "type": "string", "pattern": "^[0-9a-f]{40}$" },
-        "validatedAt": { "type": "string", "format": "date-time" },
+        "validatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(?:\\.\\d+)?(?:Z|[+-]\\d{2}:\\d{2})$"
+        },
         "conclusion": { "enum": ["passed", "failed", "unknown"] },
         "message": { "type": "string", "minLength": 1, "maxLength": 200 },
         "gates": { "type": "array", "items": { "$ref": "#/$defs/gate" } },
         "metrics": {
           "type": "object",
+          "propertyNames": { "pattern": "^[a-zA-Z][a-zA-Z0-9_-]*$" },
           "additionalProperties": { "$ref": "#/$defs/metricValue" }
         }
       },
@@ -129,8 +165,8 @@
       "additionalProperties": false,
       "required": ["id", "repository", "kind", "visibility", "notApplicableAreas", "process", "quality"],
       "properties": {
-        "id": { "type": "string", "pattern": "^[a-z0-9][a-z0-9-]*$" },
-        "repository": { "type": "string", "pattern": "^[^/]+/[^/]+$" },
+        "id": { "type": "string", "pattern": "^[a-z0-9][a-z0-9-]*$", "maxLength": 80 },
+        "repository": { "type": "string", "pattern": "^[^/]+/[^/]+$", "maxLength": 200 },
         "kind": { "enum": ["node", "static"] },
         "visibility": { "enum": ["public", "private"] },
         "notApplicableAreas": {

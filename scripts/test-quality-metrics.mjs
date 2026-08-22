@@ -83,9 +83,46 @@ assert.ok(schema.$defs.gate.properties.applicability.enum.includes("not-applicab
 assert.ok(schema.$defs.gate.properties.status.enum.includes("unknown"));
 assert.equal(schema.properties.metrics.propertyNames.pattern, "^[a-zA-Z][a-zA-Z0-9_-]*$");
 assert.equal(schema.$defs.metricValue.oneOf[1].propertyNames.pattern, "^[a-zA-Z][a-zA-Z0-9_-]*$");
+assert.equal(schema.properties.run.properties.startedAt.pattern, "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(?:\\.\\d+)?(?:Z|[+-]\\d{2}:\\d{2})$");
+assert.equal(schema.properties.run.properties.completedAt.pattern, schema.properties.run.properties.startedAt.pattern);
+assert.equal(schema.properties.run.properties.url.pattern, "^https?://");
+assert.equal(schema.$defs.evidence.properties.url.pattern, "^https?://");
+assert.equal(schema.properties.project.properties.name.maxLength, 120);
+assert.equal(schema.$defs.evidence.properties.label.maxLength, 160);
+assert.equal(schema.$defs.gate.properties.label.maxLength, 160);
+assert.equal(schema.$defs.gate.properties.details.maxLength, 400);
+
+const notApplicableRule = schema.$defs.gate.allOf.find(
+  (rule) => rule.if?.properties?.applicability?.const === "not-applicable"
+);
+assert.equal(notApplicableRule.then.properties.status.const, "not-applicable");
+const applicableRule = schema.$defs.gate.allOf.find(
+  (rule) => rule.if?.properties?.applicability?.enum?.join(",") === "required,optional"
+);
+assert.equal(applicableRule.then.properties.status.not.const, "not-applicable");
 
 assert.throws(() => validateQualityMetrics({ ...report, standard: { ...report.standard, sha: "invalid" } }), /standard.sha/);
 assert.throws(() => validateQualityMetrics({ ...report, metrics: { coverage: null } }), /no puede ser null/);
+assert.throws(
+  () => validateQualityMetrics({ ...report, project: { ...report.project, name: "x".repeat(121) } }),
+  /project.name.*límite/
+);
+assert.throws(
+  () => validateQualityMetrics({ ...report, evidence: [{ ...report.evidence[0], label: "x".repeat(161) }] }),
+  /evidence\[0\]\.label.*límite/
+);
+assert.throws(
+  () => validateQualityMetrics({ ...report, gates: [{ ...report.gates[0], label: "x".repeat(161) }] }),
+  /gates\[0\]\.label.*límite/
+);
+assert.throws(
+  () => validateQualityMetrics({ ...report, gates: [{ ...report.gates[0], details: "x".repeat(401) }] }),
+  /gates\[0\]\.details.*límite/
+);
+assert.throws(
+  () => validateQualityMetrics({ ...report, run: { ...report.run, startedAt: "2026-08-13" } }),
+  /run.startedAt.*RFC3339/
+);
 
 // Regresiones: rechazo de propiedades desconocidas en los 7 objetos cerrados
 assert.throws(() => validateQualityMetrics({ ...report, extraField: "invalido" }), /report\.extraField no está permitido/);

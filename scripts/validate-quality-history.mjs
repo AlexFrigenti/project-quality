@@ -1,13 +1,19 @@
 import { readFile } from "node:fs/promises";
 import { pathToFileURL } from "node:url";
 import { resolve } from "node:path";
-
-const PROCESS_STATUSES = new Set(["pass", "warning", "fail", "unknown", "pending", "missing", "not_applicable"]);
-const QUALITY_STATUSES = new Set(["current", "pending", "unavailable"]);
-const APPLICABILITIES = new Set(["required", "optional", "not-applicable"]);
-const GATE_STATUSES = new Set(["passed", "failed", "skipped", "not-applicable", "unknown"]);
-const CONCLUSIONS = new Set(["passed", "failed", "unknown"]);
-const TOKEN_PATTERN = /(gh[pousr]_[A-Za-z0-9_]+|github_pat_[A-Za-z0-9_]+|Bearer\s+[A-Za-z0-9._-]+)/i;
+import {
+  APPLICABILITIES,
+  CONCLUSIONS,
+  CONTRACT_LIMITS,
+  CONTRACT_REGEXP,
+  METRICS_GATE_STATUSES,
+  PROCESS_STATUSES,
+  QUALITY_HISTORY_KEYS,
+  QUALITY_STATUSES,
+  TOKEN_PATTERN,
+  isRfc3339DateTime,
+  stringLength
+} from "./quality-contract.mjs";
 
 function fail(message) {
   throw new Error(message);
@@ -25,16 +31,17 @@ function keys(value, allowed, path) {
 
 function text(value, path, maxLength = 1000) {
   if (typeof value !== "string" || value.trim() === "") fail(path + " debe ser texto no vacío");
-  if (value.length > maxLength) fail(path + " supera el límite de longitud");
+  if (stringLength(value) > maxLength) fail(path + " supera el límite de longitud");
 }
 
 function sha(value, path, length = 40) {
-  if (typeof value !== "string" || !new RegExp("^[0-9a-f]{" + length + "}$").test(value)) fail(path + " debe ser un SHA válido");
+  const pattern = length === 64 ? CONTRACT_REGEXP.sha64 : CONTRACT_REGEXP.sha40;
+  if (typeof value !== "string" || !pattern.test(value)) fail(path + " debe ser un SHA válido");
 }
 
 function date(value, path) {
   text(value, path);
-  if (Number.isNaN(Date.parse(value))) fail(path + " debe ser una fecha ISO válida");
+  if (!isRfc3339DateTime(value)) fail(path + " debe ser una fecha RFC3339 válida");
 }
 
 function noNull(value, path = "snapshot") {
@@ -50,17 +57,17 @@ function noNull(value, path = "snapshot") {
 
 function metric(value, path, context = { count: 0, depth: 0 }) {
   context.count += 1;
-  if (context.count > 100) fail("Demasiados valores métricos en " + path);
+  if (context.count > CONTRACT_LIMITS.metricMaxNodes) fail("Demasiados valores métricos en " + path);
   if (typeof value === "number") {
     if (!Number.isFinite(value) || value < 0) fail(path + " debe ser un número no negativo");
     return;
   }
   object(value, path);
-  if (++context.depth > 6) fail(path + " está demasiado anidada");
+  if (++context.depth > CONTRACT_LIMITS.metricMaxDepth) fail(path + " está demasiado anidada");
   const entries = Object.entries(value);
   if (entries.length === 0) fail(path + " no puede estar vacío");
   for (const [key, child] of entries) {
-    if (!/^[a-zA-Z][a-zA-Z0-9_-]*$/.test(key)) fail(path + "." + key + " no es válido");
+    if (!CONTRACT_REGEXP.metricName.test(key)) fail(path + "." + key + " no es válido");
     metric(child, path + "." + key, context);
   }
   context.depth -= 1;
@@ -68,24 +75,24 @@ function metric(value, path, context = { count: 0, depth: 0 }) {
 
 function validateGate(gate, path) {
   object(gate, path);
-  keys(gate, new Set(["id", "label", "applicability", "status", "details"]), path);
-  text(gate.id, path + ".id", 80);
-  if (!/^[a-z0-9][a-z0-9-]*$/.test(gate.id)) fail(path + ".id no es válido");
-  text(gate.label, path + ".label", 160);
+  keys(gate, QUALITY_HISTORY_KEYS.gate, path);
+  text(gate.id, path + ".id", CONTRACT_LIMITS.historyGateId);
+  if (!CONTRACT_REGEXP.identifier.test(gate.id)) fail(path + ".id no es válido");
+  text(gate.label, path + ".label", CONTRACT_LIMITS.gateLabel);
   if (!APPLICABILITIES.has(gate.applicability)) fail(path + ".applicability no es válida");
-  if (!GATE_STATUSES.has(gate.status)) fail(path + ".status no es válido");
+  if (!METRICS_GATE_STATUSES.has(gate.status)) fail(path + ".status no es válido");
   if (gate.applicability === "not-applicable" && gate.status !== "not-applicable") {
     fail(path + " debe usar status not-applicable cuando no aplica");
   }
   if (gate.applicability !== "not-applicable" && gate.status === "not-applicable") {
     fail(path + " no puede usar status not-applicable si aplica");
   }
-  text(gate.details, path + ".details", 400);
+  text(gate.details, path + ".details", CONTRACT_LIMITS.gateDetails);
 }
 
 function validateProcess(process, path) {
   object(process, path);
-  keys(process, new Set(["overall", "mainProtection", "workflow", "checks"]), path);
+  keys(process, QUALITY_HISTORY_KEYS.process, path);
   for (const key of ["overall", "mainProtection", "workflow"]) {
     if (!PROCESS_STATUSES.has(process[key])) fail(path + "." + key + " no es válido");
   }
@@ -93,23 +100,23 @@ function validateProcess(process, path) {
   process.checks.forEach((check, index) => {
     const checkPath = path + ".checks[" + index + "]";
     object(check, checkPath);
-    keys(check, new Set(["id", "status"]), checkPath);
-    text(check.id, checkPath + ".id", 80);
-    if (!/^[a-z0-9][a-z0-9-]*$/.test(check.id)) fail(checkPath + ".id no es válido");
+    keys(check, QUALITY_HISTORY_KEYS.check, checkPath);
+    text(check.id, checkPath + ".id", CONTRACT_LIMITS.historyCheckId);
+    if (!CONTRACT_REGEXP.identifier.test(check.id)) fail(checkPath + ".id no es válido");
     if (!PROCESS_STATUSES.has(check.status)) fail(checkPath + ".status no es válido");
   });
 }
 
 function validateQuality(quality, path) {
   object(quality, path);
-  keys(quality, new Set(["status", "currentHeadSha", "commitSha", "validatedAt", "conclusion", "message", "gates", "metrics"]), path);
+  keys(quality, QUALITY_HISTORY_KEYS.quality, path);
   if (!QUALITY_STATUSES.has(quality.status)) fail(path + ".status no es válido");
   if (!Array.isArray(quality.gates)) fail(path + ".gates debe ser un array");
   quality.gates.forEach((gate, index) => validateGate(gate, path + ".gates[" + index + "]"));
   object(quality.metrics, path + ".metrics");
   const context = { count: 0, depth: 0 };
   for (const [key, value] of Object.entries(quality.metrics)) {
-    if (!/^[a-zA-Z][a-zA-Z0-9_-]*$/.test(key)) fail(path + ".metrics." + key + " no es válido");
+    if (!CONTRACT_REGEXP.metricName.test(key)) fail(path + ".metrics." + key + " no es válido");
     metric(value, path + ".metrics." + key, context);
   }
 
@@ -120,7 +127,7 @@ function validateQuality(quality, path) {
     if (quality.gates.length === 0) fail(path + ".gates actual debe contener al menos un gate");
     if ("message" in quality || "currentHeadSha" in quality) fail(path + " actual contiene campos pendientes");
   } else {
-    text(quality.message, path + ".message", 200);
+    text(quality.message, path + ".message", CONTRACT_LIMITS.qualityMessage);
     if (quality.gates.length !== 0) fail(path + ".gates no puede contener gates en estado " + quality.status);
     if ("commitSha" in quality || "validatedAt" in quality || "conclusion" in quality) {
       fail(path + " pendiente no puede contener una validación actual");
@@ -153,15 +160,15 @@ function rejectUnsafe(value, path = "snapshot", seen = new Set()) {
 
 export function validateQualityHistory(snapshot) {
   object(snapshot, "snapshot");
-  keys(snapshot, new Set(["schemaVersion", "id", "generatedAt", "dashboardCommitSha", "standard", "repositories"]), "snapshot");
+  keys(snapshot, QUALITY_HISTORY_KEYS.root, "snapshot");
   noNull(snapshot);
   if (snapshot.schemaVersion !== 1) fail("schemaVersion debe ser 1");
   sha(snapshot.id, "id", 64);
   date(snapshot.generatedAt, "generatedAt");
   sha(snapshot.dashboardCommitSha, "dashboardCommitSha");
   object(snapshot.standard, "standard");
-  keys(snapshot.standard, new Set(["release", "sha"]), "standard");
-  text(snapshot.standard.release, "standard.release", 40);
+  keys(snapshot.standard, QUALITY_HISTORY_KEYS.standard, "standard");
+  text(snapshot.standard.release, "standard.release", CONTRACT_LIMITS.standardRelease);
   sha(snapshot.standard.sha, "standard.sha");
   if (!Array.isArray(snapshot.repositories) || snapshot.repositories.length === 0) fail("repositories debe contener proyectos");
 
@@ -169,17 +176,17 @@ export function validateQualityHistory(snapshot) {
   snapshot.repositories.forEach((repository, index) => {
     const path = "repositories[" + index + "]";
     object(repository, path);
-    keys(repository, new Set(["id", "repository", "kind", "visibility", "notApplicableAreas", "process", "quality"]), path);
-    text(repository.id, path + ".id", 80);
-    if (!/^[a-z0-9][a-z0-9-]*$/.test(repository.id)) fail(path + ".id no es válido");
+    keys(repository, QUALITY_HISTORY_KEYS.repository, path);
+    text(repository.id, path + ".id", CONTRACT_LIMITS.historyRepositoryId);
+    if (!CONTRACT_REGEXP.identifier.test(repository.id)) fail(path + ".id no es válido");
     if (ids.has(repository.id)) fail("Proyecto duplicado: " + repository.id);
     ids.add(repository.id);
-    text(repository.repository, path + ".repository", 200);
-    if (!/^[^/]+\/[^/]+$/.test(repository.repository)) fail(path + ".repository no es válido");
+    text(repository.repository, path + ".repository", CONTRACT_LIMITS.historyRepositoryName);
+    if (!CONTRACT_REGEXP.repository.test(repository.repository)) fail(path + ".repository no es válido");
     if (!new Set(["node", "static"]).has(repository.kind)) fail(path + ".kind no es válido");
     if (!new Set(["public", "private"]).has(repository.visibility)) fail(path + ".visibility no es válida");
     if (!Array.isArray(repository.notApplicableAreas)) fail(path + ".notApplicableAreas debe ser un array");
-    repository.notApplicableAreas.forEach((item, itemIndex) => text(item, path + ".notApplicableAreas[" + itemIndex + "]", 120));
+    repository.notApplicableAreas.forEach((item, itemIndex) => text(item, path + ".notApplicableAreas[" + itemIndex + "]", CONTRACT_LIMITS.notApplicableArea));
     validateProcess(repository.process, path + ".process");
     validateQuality(repository.quality, path + ".quality");
   });

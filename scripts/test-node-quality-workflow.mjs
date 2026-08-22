@@ -30,4 +30,13 @@ assert.match(
   "el gate debe seguir bloqueando con el test-command original",
 );
 
+const sparseCheckoutStart = workflow.indexOf("sparse-checkout:");
+const sparseCheckoutEnd = workflow.indexOf("run: node .quality-standard/scripts/generate-quality-metrics.mjs");
+const sparseCheckout = workflow.slice(sparseCheckoutStart, sparseCheckoutEnd);
+assert.match(
+  sparseCheckout,
+  /scripts\/quality-contract\.mjs/,
+  "el checkout parcial debe incluir las definiciones compartidas del contrato",
+);
+
 console.log("Node quality workflow diagnostics contract válido.");

@@ -63,6 +63,24 @@ assert.equal(first.repositories.find((repo) => repo.id === "nucleo").process.mec
 assert.equal(first.repositories.find((repo) => repo.id === "gestor-autonomo").quality.run, undefined);
 assert.equal(/url|token|Bearer/i.test(JSON.stringify(first)), false);
 assert.throws(() => validateQualityHistory({ ...first, unexpected: true }), /no está permitido/);
+assert.throws(
+  () => validateQualityHistory({ ...first, generatedAt: "2026-08-13" }),
+  /generatedAt.*RFC3339/
+);
+assert.throws(
+  () => validateQualityHistory({
+    ...first,
+    repositories: [{ ...first.repositories[0], id: "x".repeat(81) }, ...first.repositories.slice(1)]
+  }),
+  /repositories\[0\]\.id.*límite/
+);
+assert.throws(
+  () => validateQualityHistory({
+    ...first,
+    repositories: [{ ...first.repositories[0], repository: "owner/" + "x".repeat(196) }, ...first.repositories.slice(1)]
+  }),
+  /repositories\[0\]\.repository.*límite/
+);
 
 const withUrlTextInDetails = structuredClone(first);
 withUrlTextInDetails.repositories[0].quality.gates[0].details = "url: no requerida para el gate";
@@ -130,6 +148,22 @@ assert.equal(schema.properties.schemaVersion.const, 1);
 assert.ok(schema.$defs.quality.required.includes("gates"));
 assert.equal(schema.$defs.quality.properties.gates.type, "array");
 assert.equal("minItems" in schema.$defs.quality.properties.gates, false);
+assert.equal(schema.properties.generatedAt.pattern, "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(?:\\.\\d+)?(?:Z|[+-]\\d{2}:\\d{2})$");
+assert.equal(schema.$defs.quality.properties.validatedAt.pattern, schema.properties.generatedAt.pattern);
+assert.equal(schema.$defs.metricValue.oneOf[1].propertyNames.pattern, "^[a-zA-Z][a-zA-Z0-9_-]*$");
+assert.equal(schema.$defs.quality.properties.metrics.propertyNames.pattern, "^[a-zA-Z][a-zA-Z0-9_-]*$");
+assert.equal(schema.$defs.gate.properties.id.maxLength, 80);
+assert.equal(schema.$defs.process.properties.checks.items.properties.id.maxLength, 80);
+assert.equal(schema.$defs.repository.properties.id.maxLength, 80);
+
+const gateNotApplicableRule = schema.$defs.gate.allOf.find(
+  (rule) => rule.if?.properties?.applicability?.const === "not-applicable"
+);
+assert.equal(gateNotApplicableRule.then.properties.status.const, "not-applicable");
+const gateApplicableRule = schema.$defs.gate.allOf.find(
+  (rule) => rule.if?.properties?.applicability?.enum?.join(",") === "required,optional"
+);
+assert.equal(gateApplicableRule.then.properties.status.not.const, "not-applicable");
 
 const currentCondition = schema.$defs.quality.allOf.find((cond) => cond.if?.properties?.status?.const === "current");
 assert.ok(currentCondition);
