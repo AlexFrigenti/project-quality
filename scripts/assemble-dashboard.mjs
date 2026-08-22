@@ -1,6 +1,7 @@
 import { mkdir, readdir, readFile, writeFile, copyFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
+import { buildDashboardSummary, validateDashboard } from "./dashboard-contract.mjs";
 
 const expectedIds = ["gestor-autonomo", "nexo", "nucleo", "nucleo-preview"];
 
@@ -15,15 +16,22 @@ export async function assembleDashboard({
   const reports = [];
   for (const name of names) {
     const value = JSON.parse(await readFile(join(reportsDir, name), "utf8"));
-    if (value?.repository?.id) reports.push(value);
+    if (!value?.repository?.id) throw new Error(`Informe de auditoría inválido: ${name}`);
+    reports.push(value);
   }
 
-  const byId = new Map(reports.map((report) => [report.repository.id, report]));
+  const byId = new Map();
+  for (const report of reports) {
+    const id = report.repository.id;
+    if (byId.has(id)) throw new Error(`Hay informes de auditoría duplicados para: ${id}`);
+    byId.set(id, report);
+  }
+  const unexpected = [...byId.keys()].filter((id) => !expectedIds.includes(id));
+  if (unexpected.length > 0) throw new Error(`Hay informes de auditoría desconocidos: ${unexpected.join(", ")}`);
   const missing = expectedIds.filter((id) => !byId.has(id));
   if (missing.length > 0) throw new Error(`Faltan informes de auditoría: ${missing.join(", ")}`);
 
   const orderedReports = expectedIds.map((id) => byId.get(id));
-  const count = (predicate) => orderedReports.filter(predicate).length;
   const data = {
     schemaVersion: 1,
     generatedAt: now.toISOString(),
@@ -33,20 +41,11 @@ export async function assembleDashboard({
       standardRelease: env.STANDARD_RELEASE || "v1.1.0",
       standardSha: env.STANDARD_SHA || null
     },
-    summary: {
-      total: orderedReports.length,
-      pass: count((report) => report.overall === "pass"),
-      warning: count((report) => report.overall === "warning"),
-      fail: count((report) => report.overall === "fail"),
-      protectedMain: count((report) => report.governance?.ruleset?.status === "pass"),
-      pinnedWorkflows: count((report) => report.workflow?.status === "pass"),
-      qualityGreen: count((report) => report.qualityRun?.status === "pass"),
-      qualityCurrent: count((report) => report.qualityEvidence?.status === "current"),
-      qualityPending: count((report) => report.qualityEvidence?.status === "pending"),
-      accessRequired: count((report) => report.repository?.access === "required")
-    },
+    summary: buildDashboardSummary(orderedReports),
     repositories: orderedReports
   };
+
+  validateDashboard(data);
 
   await writeFile(join(outputDir, "data.json"), `${JSON.stringify(data, null, 2)}\n`);
 

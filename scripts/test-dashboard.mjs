@@ -5,7 +5,8 @@ import { tmpdir } from "node:os";
 import { constants } from "node:fs";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
-import { validateDashboard } from "./validate-dashboard.mjs";
+import { buildDashboardSummary, validateDashboard } from "./dashboard-contract.mjs";
+import { validateDashboard as validateDashboardCliExport } from "./validate-dashboard.mjs";
 import { assembleDashboard } from "./assemble-dashboard.mjs";
 
 const execFileAsync = promisify(execFile);
@@ -18,6 +19,70 @@ const sampleSha = "0123456789abcdef0123456789abcdef01234567";
 
 function buildValidRepository(id, { visibility = "public", qualityStatus = "current", governanceMechanism = "ruleset" } = {}) {
   const isPrivate = visibility === "private";
+  const repositoryUrl = isPrivate ? null : `https://github.com/AlexFrigenti/${id}`;
+  const workflowPath = ".github/workflows/quality.yml";
+  const workflowUrl = repositoryUrl ? `${repositoryUrl}/blob/main/${workflowPath}` : null;
+  const rulesetUrl = repositoryUrl ? `${repositoryUrl}/rules` : null;
+  const runUrl = repositoryUrl ? `${repositoryUrl}/actions/runs/1` : null;
+  const startedAt = "2026-08-18T14:59:00.000Z";
+  const completedAt = "2026-08-18T15:00:00.000Z";
+  const qualityEvidence = qualityStatus === "current" ? {
+    status: "current",
+    message: "Evidencia correspondiente exactamente al HEAD actual de la rama estable.",
+    currentCommitSha: sampleSha,
+    validatedCommitSha: sampleSha,
+    artifact: {
+      id: 1,
+      name: "quality-metrics",
+      createdAt: completedAt,
+      expiresAt: "2026-11-16T15:00:00.000Z"
+    },
+    summary: {
+      conclusion: "passed",
+      commit: {
+        sha: sampleSha,
+        ref: "refs/heads/main",
+        branch: "main",
+        event: "push"
+      },
+      run: {
+        workflow: "Quality checks",
+        id: 1,
+        attempt: 1,
+        startedAt,
+        completedAt,
+        ...(runUrl ? { url: runUrl } : {})
+      },
+      standard: { version: "v1.1.0", sha: sampleSha },
+      gates: [
+        {
+          id: "build",
+          label: "Build",
+          applicability: "required",
+          status: "passed",
+          details: "Gate ejecutado correctamente.",
+          evidence: [
+            {
+              kind: "workflow-run",
+              label: "Build step",
+              ...(runUrl ? { url: runUrl } : {})
+            }
+          ]
+        }
+      ],
+      metrics: {},
+      ...(runUrl ? {
+        evidence: [{ kind: "workflow-run", label: "Quality report", url: runUrl }]
+      } : {})
+    }
+  } : {
+    status: qualityStatus,
+    message: "Evidencia pendiente para el commit actual",
+    currentCommitSha: sampleSha,
+    validatedCommitSha: null,
+    artifact: null,
+    summary: null
+  };
   return {
     repository: {
       id,
@@ -26,47 +91,60 @@ function buildValidRepository(id, { visibility = "public", qualityStatus = "curr
       visibility,
       access: "available",
       defaultBranch: "main",
-      url: isPrivate ? null : `https://github.com/AlexFrigenti/${id}`,
+      url: repositoryUrl,
       headSha: sampleSha
     },
-    overall: "pass",
+    profile: {
+      id,
+      label: id,
+      kind: id === "nucleo-preview" ? "static" : "node",
+      description: `Perfil de prueba para ${id}.`,
+      notApplicableAreas: []
+    },
+    overall: qualityStatus === "current" ? "pass" : "warning",
     checks: [
-      { id: "default-branch", label: "Rama estable", status: "pass", detail: "La rama por defecto es main." }
+      { id: "default-branch", label: "Rama estable", status: "pass", detail: "La rama por defecto es main.", evidenceUrl: null },
+      ...(qualityStatus === "current" ? [] : [{
+        id: "latest-quality-run",
+        label: "Última validación",
+        status: qualityStatus === "pending" ? "pending" : "unknown",
+        detail: "Evidencia no utilizable para el commit actual.",
+        evidenceUrl: null
+      }])
     ],
-    governance: { ruleset: { status: "pass", mechanism: governanceMechanism } },
-    workflow: { status: "pass" },
-    qualityRun: { status: "pass" },
-    qualityEvidence: qualityStatus === "current" ? {
-      status: "current",
-      currentCommitSha: sampleSha,
-      validatedCommitSha: sampleSha,
-      summary: {
-        conclusion: "passed",
-        commit: { sha: sampleSha, branch: "main" },
-        run: isPrivate ? { completedAt: "2026-08-18T15:00:00.000Z" } : {
-          completedAt: "2026-08-18T15:00:00.000Z",
-          url: `https://github.com/AlexFrigenti/${id}/actions/runs/1`
-        },
-        gates: [
-          {
-            id: "build",
-            label: "Build",
-            applicability: "required",
-            status: "passed",
-            evidence: isPrivate ? [{ kind: "workflow-run", label: "Build step" }] : [
-              { kind: "workflow-run", label: "Build step", url: `https://github.com/AlexFrigenti/${id}/actions/runs/1` }
-            ]
-          }
-        ]
+    issues: [],
+    governance: {
+      ruleset: {
+        status: "pass",
+        name: "Main protection",
+        url: rulesetUrl,
+        mechanism: governanceMechanism,
+        reason: "Protección de prueba válida.",
+        rules: ["pull_request", "required_status_checks"]
       }
+    },
+    workflow: {
+      path: workflowPath,
+      reusableWorkflow: ".github/workflows/node-quality.yml",
+      pinnedTo: sampleSha,
+      status: "pass",
+      url: workflowUrl,
+      missingInputs: []
+    },
+    qualityRun: qualityStatus === "current" ? {
+      status: "pass",
+      conclusion: "passed",
+      createdAt: completedAt,
+      url: runUrl,
+      headSha: sampleSha
     } : {
-      status: "pending",
-      message: "Evidencia pendiente para el commit actual",
-      currentCommitSha: sampleSha,
-      validatedCommitSha: null,
-      artifact: null,
-      summary: null
-    }
+      status: qualityStatus === "pending" ? "pending" : "unknown",
+      conclusion: null,
+      createdAt: null,
+      url: null,
+      headSha: null
+    },
+    qualityEvidence
   };
 }
 
@@ -124,7 +202,7 @@ function buildValidDashboard() {
 {
   const invalid = buildValidDashboard();
   invalid.repositories[3] = buildValidRepository("gestor-autonomo");
-  assert.throws(() => validateDashboard(invalid), /no coinciden con el conjunto esperado/);
+  assert.throws(() => validateDashboard(invalid), /duplicado|no coinciden con el conjunto esperado/);
 }
 
 // 1.4. ID desconocido
@@ -201,6 +279,114 @@ function buildValidDashboard() {
   assert.throws(() => validateDashboard(invalid), /patrón que parece un token/);
 }
 
+// 1.13. Todos los agregados declarados deben coincidir con los informes
+{
+  const invalid = buildValidDashboard();
+  invalid.summary.protectedMain = 0;
+  assert.throws(() => validateDashboard(invalid), /protectedMain/);
+}
+
+// 1.14. La recomposición pura debe cubrir todos los contadores actuales
+{
+  const valid = buildValidDashboard();
+  assert.deepEqual(buildDashboardSummary(valid.repositories), valid.summary);
+  assert.equal(validateDashboardCliExport, validateDashboard);
+  for (const key of Object.keys(valid.summary)) {
+    const invalid = buildValidDashboard();
+    invalid.summary[key] += 1;
+    assert.throws(() => validateDashboard(invalid), new RegExp("La métrica " + key + " no coincide"));
+  }
+}
+
+// 1.14b. Los agregados desconocidos no pueden atravesar el contrato sin recomposición
+{
+  const invalid = buildValidDashboard();
+  invalid.summary.unverifiedCount = 0;
+  assert.throws(() => validateDashboard(invalid), /summary|Métrica|agregado/i);
+}
+
+// 1.14c. Las URLs privadas pueden omitirse por completo, no solo ser null
+{
+  const valid = buildValidDashboard();
+  const privateReport = valid.repositories[0];
+  delete privateReport.repository.url;
+  delete privateReport.workflow.url;
+  delete privateReport.governance.ruleset.url;
+  delete privateReport.qualityRun.url;
+  delete privateReport.checks[0].evidenceUrl;
+  assert.equal(validateDashboard(valid), true);
+}
+
+// 1.15. Un informe privado no puede filtrar URLs en campos de proceso
+for (const [label, mutate] of [
+  ["repository.url", (report) => { report.repository.url = "https://github.com/private-leak"; }],
+  ["workflow.url", (report) => { report.workflow.url = "https://github.com/private-leak"; }],
+  ["governance.ruleset.url", (report) => { report.governance.ruleset.url = "https://github.com/private-leak"; }],
+  ["qualityRun.url", (report) => { report.qualityRun.url = "https://github.com/private-leak"; }],
+  ["checks[].evidenceUrl", (report) => { report.checks[0].evidenceUrl = "https://github.com/private-leak"; }]
+]) {
+  const invalid = buildValidDashboard();
+  mutate(invalid.repositories[0]);
+  assert.throws(
+    () => validateDashboard(invalid),
+    /privad|URL|evidencia/i,
+    `Debe rechazar una URL privada en ${label}`
+  );
+}
+
+// 1.16. Un informe privado tampoco puede filtrar una URL en un campo anidado no conocido
+for (const nestedUrl of ["https://github.com/private-nested-leak", "ftp://private-nested-leak.invalid/resource"]) {
+  const invalid = buildValidDashboard();
+  invalid.repositories[0].metadata = { trace: { href: nestedUrl } };
+  assert.throws(() => validateDashboard(invalid), /URL|privad/i);
+}
+
+// 1.17. La evidencia current debe conservar la coherencia de la ejecución
+{
+  const invalid = buildValidDashboard();
+  invalid.repositories[0].qualityRun.status = "fail";
+  assert.throws(() => validateDashboard(invalid), /qualityRun/);
+}
+
+// 1.17b. Una ejecución current fallida no puede ser verde aunque falte su check proyectado
+{
+  const invalid = buildValidDashboard();
+  const report = invalid.repositories[0];
+  report.qualityEvidence.summary.conclusion = "failed";
+  report.qualityEvidence.summary.gates[0].status = "failed";
+  report.qualityRun.status = "fail";
+  report.qualityRun.conclusion = "failed";
+  report.overall = "pass";
+  invalid.summary = buildDashboardSummary(invalid.repositories);
+  assert.throws(() => validateDashboard(invalid), /overall|qualityRun|latest-quality-run/i);
+}
+
+// 1.18. La evidencia no utilizable no puede llevar resumen ni convertirse en verde
+for (const status of ["pending", "unavailable"]) {
+  const invalid = buildValidDashboard();
+  invalid.repositories[0] = buildValidRepository("gestor-autonomo", { visibility: "private", qualityStatus: status });
+  invalid.summary = buildDashboardSummary(invalid.repositories);
+  invalid.repositories[0].qualityEvidence.summary = {};
+  assert.throws(() => validateDashboard(invalid), /summary|evidencia/i);
+
+  const withGreenRun = buildValidDashboard();
+  withGreenRun.repositories[0] = buildValidRepository("gestor-autonomo", { visibility: "private", qualityStatus: status });
+  withGreenRun.repositories[0].qualityRun.status = "pass";
+  withGreenRun.summary = buildDashboardSummary(withGreenRun.repositories);
+  assert.throws(() => validateDashboard(withGreenRun), /qualityRun/);
+}
+
+// 1.19. pending y unavailable se distinguen y no comparten contador
+{
+  const valid = buildValidDashboard();
+  valid.repositories[0] = buildValidRepository("gestor-autonomo", { visibility: "private", qualityStatus: "pending" });
+  valid.repositories[1] = buildValidRepository("nexo", { visibility: "private", qualityStatus: "unavailable" });
+  valid.summary = buildDashboardSummary(valid.repositories);
+  assert.equal(valid.summary.qualityCurrent, 2);
+  assert.equal(valid.summary.qualityPending, 1);
+  assert.equal(validateDashboard(valid), true);
+}
+
 // -------------------------------------------------------------
 // 2. Pruebas de assembleDashboard (Filesystem temporal)
 // -------------------------------------------------------------
@@ -270,7 +456,57 @@ try {
     assert.ok(historyHtml.length > 0, "history.html no debe estar vacío");
   }
 
-  // 2.2. Caso reporte ausente: solo 3 reportes
+  // 2.2. El ensamblador no debe ignorar informes duplicados
+  {
+    await rm(outputDir, { recursive: true, force: true });
+    const duplicate = JSON.parse(await readFile(join(reportsDir, "report-gestor-autonomo.json"), "utf8"));
+    await writeFile(join(reportsDir, "report-gestor-autonomo-copy.json"), JSON.stringify(duplicate, null, 2) + "\n");
+
+    await assert.rejects(
+      () => assembleDashboard({
+        reportsDir,
+        outputDir,
+        env: { GITHUB_SHA: sampleSha, STANDARD_RELEASE: "v1.1.0", STANDARD_SHA: sampleSha }
+      }),
+      /duplicados/,
+      "assembleDashboard debe rechazar informes duplicados"
+    );
+    await assert.rejects(() => access(join(outputDir, "data.json")), /ENOENT/);
+  }
+
+  // 2.3. Caso evidencia current incompleta
+  {
+    await rm(reportsDir, { recursive: true, force: true });
+    await rm(outputDir, { recursive: true, force: true });
+
+    const { mkdir } = await import("node:fs/promises");
+    await mkdir(reportsDir, { recursive: true });
+
+    for (const id of expectedIds) {
+      const report = buildValidRepository(id, {
+        visibility: ["gestor-autonomo", "nexo"].includes(id) ? "private" : "public"
+      });
+      if (id === "gestor-autonomo") report.qualityEvidence = { status: "current" };
+      await writeFile(join(reportsDir, `report-${id}.json`), JSON.stringify(report, null, 2) + "\n");
+    }
+
+    await assert.rejects(
+      () => assembleDashboard({
+        reportsDir,
+        outputDir,
+        env: { GITHUB_SHA: sampleSha, STANDARD_RELEASE: "v1.1.0", STANDARD_SHA: sampleSha }
+      }),
+      /summary|evidencia/i,
+      "assembleDashboard debe rechazar evidencia current incompleta"
+    );
+    await assert.rejects(
+      () => access(join(outputDir, "data.json")),
+      /ENOENT/,
+      "Un ensamblado inválido no debe dejar data.json escrito"
+    );
+  }
+
+  // 2.4. Caso reporte ausente: solo 3 reportes
   {
     await rm(reportsDir, { recursive: true, force: true });
     await rm(outputDir, { recursive: true, force: true });

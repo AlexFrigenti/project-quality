@@ -30,6 +30,10 @@ Además del proceso, el dashboard consume el artifact real `quality-metrics` de 
 - commit y fecha de validación;
 - enlace a la ejecución cuando el repositorio es público.
 
+El ensamblador recomputa todos los contadores del resumen a partir de los cuatro informes y valida la coherencia completa antes de escribir `site/data.json` o copiar las páginas. Comprueba también los SHA, la rama estable, la conclusión y los gates de la evidencia, la proyección de `qualityRun` y las relaciones entre checks y controles de proceso. Un informe incompleto o incoherente bloquea el ensamblado; el paso independiente `validate-dashboard.mjs` del workflow se conserva como defensa adicional.
+
+Los informes privados no contienen URLs ni referencias de evidencia públicas. La política se aplica tanto a los campos conocidos del dashboard como a cualquier campo anidado que contenga una URL real, y se mantiene la detección de patrones que parezcan tokens.
+
 Si todavía no existe evidencia para ese commit, el panel muestra `Evidencia pendiente para el commit actual`. Eso no se interpreta automáticamente como un fallo de calidad. Cuando la ejecución completada más reciente del commit —que es la autoritativa— tiene una evidencia que no puede utilizarse (artifact ilegible, informe que contradice la conclusión real del workflow o de otro intento), el panel lo distingue como evidencia no utilizable e indica la causa, sin sobrestimar la calidad ni retroceder a ejecuciones anteriores.
 
 ## Acceso al repositorio privado
