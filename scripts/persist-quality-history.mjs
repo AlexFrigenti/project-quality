@@ -154,14 +154,20 @@ function legacyIdentityFor(snapshot) {
   };
 }
 
+function compareById(left, right) {
+  return left.id < right.id ? -1 : left.id > right.id ? 1 : 0;
+}
+
 function semanticQualityIdentity(quality) {
   const identity = {
     status: quality.status,
-    gates: quality.gates.map((gate) => ({
-      id: gate.id,
-      applicability: gate.applicability,
-      status: gate.status
-    })),
+    gates: [...quality.gates]
+      .sort(compareById)
+      .map((gate) => ({
+        id: gate.id,
+        applicability: gate.applicability,
+        status: gate.status
+      })),
     metrics: quality.metrics
   };
   if (quality.commitSha !== undefined) identity.commitSha = quality.commitSha;
@@ -175,15 +181,17 @@ function semanticRepositoryIdentity(repository) {
     id: repository.id,
     repository: repository.repository,
     kind: repository.kind,
-    notApplicableAreas: [...repository.notApplicableAreas],
+    notApplicableAreas: [...repository.notApplicableAreas].sort(),
     process: {
       overall: repository.process.overall,
       mainProtection: repository.process.mainProtection,
       workflow: repository.process.workflow,
-      checks: repository.process.checks.map((check) => ({
-        id: check.id,
-        status: check.status
-      }))
+      checks: [...repository.process.checks]
+        .sort(compareById)
+        .map((check) => ({
+          id: check.id,
+          status: check.status
+        }))
     },
     quality: semanticQualityIdentity(repository.quality)
   };
@@ -198,7 +206,7 @@ function semanticIdentityFor(snapshot) {
       sha: snapshot.standard.sha
     },
     repositories: [...snapshot.repositories]
-      .sort((left, right) => left.id.localeCompare(right.id))
+      .sort(compareById)
       .map(semanticRepositoryIdentity)
   };
 }
