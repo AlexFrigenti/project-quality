@@ -63,6 +63,8 @@ assert.equal(metrics.$defs.gate.properties.details.maxLength, CONTRACT_LIMITS.ga
 assertGateRelations(metrics.$defs.gate, "quality-metrics gate");
 
 assert.equal(history.properties.id.pattern, CONTRACT_PATTERNS.sha64);
+assert.deepEqual(history.properties.identityVersion, { enum: [1, 2] }, "history identityVersion");
+assert.equal(history.required.includes("identityVersion"), false, "identityVersion debe ser opcional");
 assert.equal(history.properties.generatedAt.pattern, CONTRACT_PATTERNS.rfc3339DateTime);
 assert.equal(history.$defs.quality.properties.validatedAt.pattern, CONTRACT_PATTERNS.rfc3339DateTime);
 assert.equal(history.$defs.metricValue.oneOf[1].propertyNames.pattern, CONTRACT_PATTERNS.metricName);

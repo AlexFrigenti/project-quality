@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
 import { readFile } from "node:fs/promises";
-import { buildQualityHistorySnapshot } from "./persist-quality-history.mjs";
+import { buildQualityHistorySnapshot, snapshotId } from "./persist-quality-history.mjs";
 import { validateQualityHistory } from "./validate-quality-history.mjs";
 
 const dashboardSha = "0123456789abcdef0123456789abcdef01234567";
@@ -172,5 +173,51 @@ assert.equal(currentCondition.then?.properties?.gates?.minItems, 1);
 const nonCurrentCondition = schema.$defs.quality.allOf.find((cond) => cond.if?.properties?.status?.enum?.includes("pending"));
 assert.ok(nonCurrentCondition);
 assert.equal(nonCurrentCondition.then?.properties?.gates?.maxItems, 0);
+
+assert.deepEqual(schema.properties.identityVersion, { enum: [1, 2] });
+assert.equal(schema.required.includes("identityVersion"), false);
+
+const mutateSnapshot = (mutate) => {
+  const snapshot = structuredClone(first);
+  mutate(snapshot);
+  snapshot.id = snapshotId(snapshot);
+  return snapshot;
+};
+
+assert.equal(first.identityVersion, 2);
+assert.equal(mutateSnapshot((s) => { s.generatedAt = "2026-08-13T23:59:00.000Z"; }).id, first.id);
+assert.equal(mutateSnapshot((s) => { s.dashboardCommitSha = "9".repeat(40); }).id, first.id);
+assert.equal(mutateSnapshot((s) => { s.repositories[0].quality.validatedAt = "2026-08-13T09:00:00.000Z"; }).id, first.id);
+assert.equal(mutateSnapshot((s) => { s.repositories[3].quality.message = "Causa transitoria distinta"; }).id, first.id);
+assert.equal(mutateSnapshot((s) => { s.repositories[0].quality.gates[0].details = "Detalle textual alternativo"; }).id, first.id);
+assert.equal(mutateSnapshot((s) => { s.repositories[0].quality.gates[0].label = "Tests unitarios"; }).id, first.id);
+
+assert.notEqual(mutateSnapshot((s) => { s.repositories[0].quality.commitSha = gestorSha.slice(1) + "2"; }).id, first.id);
+assert.notEqual(mutateSnapshot((s) => { s.repositories[0].process.overall = "warning"; }).id, first.id);
+assert.notEqual(mutateSnapshot((s) => { s.repositories[0].quality.gates[0].status = "skipped"; }).id, first.id);
+assert.notEqual(mutateSnapshot((s) => { s.repositories[0].quality.gates[0].applicability = "optional"; }).id, first.id);
+assert.notEqual(mutateSnapshot((s) => { s.repositories[0].quality.metrics.tests.passed = 9; }).id, first.id);
+
+const legacyRecipeFor = (snapshot) => ({
+  schemaVersion: snapshot.schemaVersion,
+  standard: snapshot.standard,
+  repositories: snapshot.repositories.map((repository) => ({
+    id: repository.id,
+    repository: repository.repository,
+    process: repository.process,
+    quality: repository.quality
+  }))
+});
+const legacyExpectedId = createHash("sha256").update(JSON.stringify(legacyRecipeFor(first))).digest("hex");
+const legacySnapshot = structuredClone(first);
+delete legacySnapshot.identityVersion;
+delete legacySnapshot.id;
+assert.equal(snapshotId(legacySnapshot), legacyExpectedId);
+legacySnapshot.id = legacyExpectedId;
+assert.doesNotThrow(() => validateQualityHistory(legacySnapshot));
+assert.notEqual(first.id, legacyExpectedId);
+
+assert.throws(() => snapshotId({ ...structuredClone(first), identityVersion: 3 }), /identityVersion/);
+assert.throws(() => validateQualityHistory({ ...structuredClone(first), identityVersion: 3 }), /identityVersion/);
 
 console.log("Histórico de calidad válido.");

@@ -6,6 +6,7 @@ import {
   CONCLUSIONS,
   CONTRACT_LIMITS,
   CONTRACT_REGEXP,
+  HISTORY_IDENTITY_VERSIONS,
   METRICS_GATE_STATUSES,
   PROCESS_STATUSES,
   QUALITY_HISTORY_KEYS,
@@ -163,6 +164,7 @@ export function validateQualityHistory(snapshot) {
   keys(snapshot, QUALITY_HISTORY_KEYS.root, "snapshot");
   noNull(snapshot);
   if (snapshot.schemaVersion !== 1) fail("schemaVersion debe ser 1");
+  if (!HISTORY_IDENTITY_VERSIONS.has(snapshot.identityVersion ?? 1)) fail("identityVersion debe ser 1 o 2");
   sha(snapshot.id, "id", 64);
   date(snapshot.generatedAt, "generatedAt");
   sha(snapshot.dashboardCommitSha, "dashboardCommitSha");
