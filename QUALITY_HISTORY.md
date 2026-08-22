@@ -47,3 +47,9 @@ El contrato de cada snapshot está definido en [schemas/quality-history.schema.j
 Los snapshots y el índice no incluyen URLs, tokens, secretos, variables de entorno, headers, logs ni salidas arbitrarias de comandos. Las referencias a `No aplica` se conservan mediante `applicability: not-applicable` en los gates.
 
 Los repositorios privados solo se consultan durante el workflow con el mecanismo de autenticación ya configurado. GitHub Pages recibe únicamente el índice y los snapshots sanitizados.
+
+## Reglas estructurales y semánticas
+
+Los snapshots y el índice usan fechas RFC3339 con zona horaria explícita. Los nombres de métricas mantienen el patrón `^[a-zA-Z][a-zA-Z0-9_-]*$`; los IDs de gates, checks y repositorios tienen un máximo de 80 caracteres, y el nombre completo del repositorio un máximo de 200. La relación entre aplicabilidad y estado de los gates está definida en ambos schemas y en el validador.
+
+El validador ejecutable conserva además límites de seguridad para métricas (100 valores y profundidad máxima 6), unicidad de repositorios, identidad derivada del snapshot, orden temporal del índice y rechazo global de URLs o tokens. Estas reglas dependen del contenido completo o del contexto del histórico y no se sustituyen por declaraciones estructurales del JSON Schema.

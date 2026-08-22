@@ -1,3 +1,4 @@
+import { readFile } from "node:fs/promises";
 import { buildHistoryIndex } from "./collect-quality-history.mjs";
 import { snapshotId } from "./persist-quality-history.mjs";
 import { validateQualityHistoryIndex } from "./validate-quality-history-index.mjs";
@@ -64,5 +65,15 @@ expectFailure(() => validateQualityHistoryIndex({
   ...index,
   snapshots: [{ ...newest, repositories: [{ ...newest.repositories[0], repository: "https://example.invalid" }] }]
 }), "El índice debería rechazar URLs.");
+
+expectFailure(() => validateQualityHistoryIndex({ ...index, extraField: true }), "El índice debería rechazar campos raíz desconocidos.");
+expectFailure(() => validateQualityHistoryIndex({ ...index, generatedAt: "2026-08-13" }), "El índice debería exigir fechas RFC3339.");
+
+const schema = JSON.parse(await readFile("schemas/quality-history-index.schema.json", "utf8"));
+assert(schema.additionalProperties === false, "El schema del índice debe cerrar el objeto raíz.");
+assert(
+  schema.properties.generatedAt.pattern === "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(?:\\.\\d+)?(?:Z|[+-]\\d{2}:\\d{2})$",
+  "El schema del índice debe declarar fechas RFC3339."
+);
 
 console.log("Índice histórico válido.");

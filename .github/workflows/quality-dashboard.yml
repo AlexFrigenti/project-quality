@@ -29,6 +29,8 @@ on:
       - "scripts/test-quality-history-index.mjs"
       - "scripts/validate-quality-metrics.mjs"
       - "scripts/test-quality-metrics.mjs"
+      - "scripts/quality-contract.mjs"
+      - "scripts/test-schema-validator-parity.mjs"
       - "scripts/test-node-quality-workflow.mjs"
       - "scripts/test-node-quality-workflow-crlf.mjs"
       - ".github/workflows/node-quality.yml"
@@ -62,6 +64,8 @@ on:
       - "scripts/test-quality-history-index.mjs"
       - "scripts/validate-quality-metrics.mjs"
       - "scripts/test-quality-metrics.mjs"
+      - "scripts/quality-contract.mjs"
+      - "scripts/test-schema-validator-parity.mjs"
       - "scripts/test-node-quality-workflow.mjs"
       - "scripts/test-node-quality-workflow-crlf.mjs"
       - ".github/workflows/node-quality.yml"
@@ -160,6 +164,9 @@ jobs:
 
       - name: Validate quality history contract
         run: node scripts/test-quality-history.mjs
+
+      - name: Validate schema-validator parity
+        run: node scripts/test-schema-validator-parity.mjs
 
       - name: Validate history index tooling
         run: node scripts/test-quality-history-index.mjs

@@ -11,6 +11,7 @@ Este repositorio no contiene código de una aplicación concreta. Contiene regla
 - [QUALITY_HISTORY.md](QUALITY_HISTORY.md): contrato y persistencia del histórico sanitizado.
 - [schemas/quality-history.schema.json](schemas/quality-history.schema.json): esquema versionado de cada snapshot histórico.
 - [schemas/quality-history-index.schema.json](schemas/quality-history-index.schema.json): esquema del índice que consume GitHub Pages.
+- [scripts/quality-contract.mjs](scripts/quality-contract.mjs): definiciones estructurales compartidas por schemas y validadores.
 - [DASHBOARD.md](DASHBOARD.md): auditoría de proceso y evidencia real en GitHub Pages.
 - [CONTRIBUTING.md](CONTRIBUTING.md): flujo de trabajo para cambios y Pull Requests.
 - [AGENTS.md](AGENTS.md): instrucciones para agentes de IA que trabajen en los repositorios.

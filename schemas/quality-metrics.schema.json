@@ -107,15 +107,18 @@
         },
         "startedAt": {
           "type": "string",
-          "format": "date-time"
+          "format": "date-time",
+          "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(?:\\.\\d+)?(?:Z|[+-]\\d{2}:\\d{2})$"
         },
         "completedAt": {
           "type": "string",
-          "format": "date-time"
+          "format": "date-time",
+          "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(?:\\.\\d+)?(?:Z|[+-]\\d{2}:\\d{2})$"
         },
         "url": {
           "type": "string",
-          "format": "uri"
+          "format": "uri",
+          "pattern": "^https?://"
         }
       }
     },
@@ -191,7 +194,8 @@
         },
         "url": {
           "type": "string",
-          "format": "uri"
+          "format": "uri",
+          "pattern": "^https?://"
         }
       }
     },
@@ -249,7 +253,33 @@
         "evidence": {
           "$ref": "#/$defs/evidenceList"
         }
-      }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "applicability": { "const": "not-applicable" }
+            }
+          },
+          "then": {
+            "properties": {
+              "status": { "const": "not-applicable" }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "applicability": { "enum": ["required", "optional"] }
+            }
+          },
+          "then": {
+            "properties": {
+              "status": { "not": { "const": "not-applicable" } }
+            }
+          }
+        }
+      ]
     },
     "metricValue": {
       "oneOf": [

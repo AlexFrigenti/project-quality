@@ -3,8 +3,11 @@ import { pathToFileURL } from "node:url";
 import { resolve } from "node:path";
 import { snapshotId } from "./persist-quality-history.mjs";
 import { validateQualityHistory } from "./validate-quality-history.mjs";
-
-const TOKEN_PATTERN = /(gh[pousr]_[A-Za-z0-9_]+|github_pat_[A-Za-z0-9_]+|Bearer\s+[A-Za-z0-9._-]+)/i;
+import {
+  QUALITY_HISTORY_INDEX_KEYS,
+  TOKEN_PATTERN,
+  isRfc3339DateTime
+} from "./quality-contract.mjs";
 
 function fail(message) {
   throw new Error(message);
@@ -12,6 +15,12 @@ function fail(message) {
 
 function assert(condition, message) {
   if (!condition) fail(message);
+}
+
+function keys(value, allowed, path) {
+  for (const key of Object.keys(value)) {
+    if (!allowed.has(key)) fail(path + "." + key + " no está permitido.");
+  }
 }
 
 function rejectUnsafe(value, path = "$", seen = new Set()) {
@@ -37,8 +46,9 @@ function rejectUnsafe(value, path = "$", seen = new Set()) {
 
 export function validateQualityHistoryIndex(index) {
   assert(index && typeof index === "object" && !Array.isArray(index), "El índice histórico debe ser un objeto.");
+  keys(index, QUALITY_HISTORY_INDEX_KEYS, "index");
   assert(index.schemaVersion === 1, "schemaVersion del índice debe ser 1.");
-  assert(typeof index.generatedAt === "string" && !Number.isNaN(Date.parse(index.generatedAt)), "generatedAt del índice no es válido.");
+  assert(isRfc3339DateTime(index.generatedAt), "generatedAt del índice debe ser una fecha RFC3339 válida.");
   assert(Array.isArray(index.snapshots), "snapshots debe ser un array.");
 
   const ids = new Set();

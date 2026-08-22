@@ -168,6 +168,7 @@ jobs:
           fetch-depth: 1
           sparse-checkout: |
             schemas/quality-metrics.schema.json
+            scripts/quality-contract.mjs
             scripts/generate-quality-metrics.mjs
             scripts/validate-quality-metrics.mjs
 

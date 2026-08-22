@@ -33,6 +33,18 @@ Cada gate declara:
 
 Un gate optional puede aportar información sin bloquear la conclusión global. Los gates required determinan la conclusión. Un gate not-applicable no se interpreta como fallo.
 
+## Reglas estructurales
+
+El schema y el validador ejecutable comparten las mismas reglas estructurales:
+
+- los textos acotados respetan los límites declarados por el schema: nombre de proyecto hasta 120 caracteres, etiquetas de evidencia y gates hasta 160 y detalles hasta 400;
+- `startedAt` y `completedAt` usan una fecha-hora RFC3339 con zona horaria explícita;
+- las URLs de ejecución y evidencia deben ser HTTP o HTTPS;
+- `applicability: not-applicable` exige `status: not-applicable`, y ningún gate aplicable puede usar ese estado;
+- los nombres de métricas siguen el patrón `^[a-zA-Z][a-zA-Z0-9_-]*$`.
+
+La definición compartida está en `scripts/quality-contract.mjs` y `scripts/test-schema-validator-parity.mjs` comprueba que los schemas no se separen de los validadores. La comprobación de tokens y otras reglas de privacidad globales sigue siendo ejecutable, porque no depende de un único campo estructural.
+
 ## Métricas numéricas
 
 Los repositorios pueden pasar un metrics-command al workflow reutilizable. Ese comando debe escribir el archivo indicado por metrics-file. El contenido puede ser directamente un objeto de métricas o un objeto con una propiedad metrics:
