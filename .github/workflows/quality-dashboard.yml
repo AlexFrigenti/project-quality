@@ -30,6 +30,7 @@ on:
       - "scripts/validate-quality-metrics.mjs"
       - "scripts/test-quality-metrics.mjs"
       - "scripts/test-node-quality-workflow.mjs"
+      - "scripts/test-node-quality-workflow-crlf.mjs"
       - ".github/workflows/node-quality.yml"
       - ".github/workflows/static-quality.yml"
   push:
@@ -62,6 +63,7 @@ on:
       - "scripts/validate-quality-metrics.mjs"
       - "scripts/test-quality-metrics.mjs"
       - "scripts/test-node-quality-workflow.mjs"
+      - "scripts/test-node-quality-workflow-crlf.mjs"
       - ".github/workflows/node-quality.yml"
       - ".github/workflows/static-quality.yml"
   schedule:
@@ -136,6 +138,9 @@ jobs:
 
       - name: Validate Node workflow diagnostics contract
         run: node scripts/test-node-quality-workflow.mjs
+
+      - name: Validate Node workflow diagnostics contract on CRLF
+        run: node scripts/test-node-quality-workflow-crlf.mjs
 
       - name: Validate audit profiles
         run: node scripts/test-audit-profiles.mjs
