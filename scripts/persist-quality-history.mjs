@@ -330,10 +330,11 @@ export async function persistSnapshot(snapshot, { repository, token, targetCommi
 
   const request = deps.request || githubRequest;
   const performUpload = deps.upload || (({ release, name, content }) => uploadAsset(release, name, content, secret));
+  const perPage = deps.perPage;
 
   const fetchJson = async (path) => request(path, { token: secret });
-  for (const release of await listHistoryReleases(repo, fetchJson)) {
-    const assets = await listReleaseAssets(repo, release, fetchJson);
+  for (const release of await listHistoryReleases(repo, fetchJson, { perPage })) {
+    const assets = await listReleaseAssets(repo, release, fetchJson, { perPage });
     if (assets.some((asset) => asset?.name === assetName)) {
       return {
         created: false,

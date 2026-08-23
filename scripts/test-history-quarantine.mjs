@@ -8,6 +8,7 @@ import {
   sanitizeQuarantineDetail,
   validateQuarantineManifest
 } from "./history-quarantine.mjs";
+import { CONTRACT_PATTERNS } from "./quality-contract.mjs";
 import { collectQualityHistory, runHistoryCollection } from "./collect-quality-history.mjs";
 import { listHistoryReleases, listReleaseAssets, PAGINATION_LIMITS } from "./history-pagination.mjs";
 import { snapshotId } from "./persist-quality-history.mjs";
@@ -105,6 +106,7 @@ assert.deepEqual(
 assert.equal(schema.$defs.entry.additionalProperties, false);
 assert.ok(schema.$defs.entry.properties.assetName.pattern.startsWith("^quality-snapshot-"));
 assert.ok(schema.$defs.entry.properties.releaseTag.pattern.startsWith("^quality-history-"));
+assert.equal(schema.$defs.entry.properties.releaseTag.pattern, CONTRACT_PATTERNS.historyReleaseTag, "schema y contrato comparten la regla mensual exacta.");
 assert.deepEqual([...schema.$defs.entry.properties.releaseId.type].sort(), ["integer", "null"]);
 assert.deepEqual([...schema.$defs.entry.properties.assetId.type].sort(), ["integer", "null"]);
 
@@ -571,6 +573,204 @@ async function pageFetcherCases() {
   assert.equal(/path:\s*["']?site\/history\.json/.test(workflowText), false, "history.json nunca se sube como artifact propio.");
   const guardMatches = workflowText.match(/needs\.assemble\.result == 'success'/g) || [];
   assert.ok(guardMatches.length >= 2, "Los guards de history y deploy deben permanecer intactos.");
+}
+
+async function expectStaleHistoryQuarantined({ deps, expectThrow, quarantineExpected }) {
+  const siteDir = await mkdtemp(join(tmpdir(), "pq-ox07-matrix-"));
+  try {
+    const historyPath = join(siteDir, "history.json");
+    await writeFile(historyPath, "{\"stale\":true}\n");
+    const params = {
+      siteDir,
+      repository: "AlexFrigenti/project-quality",
+      token: "test-token",
+      currentSnapshot: historicalSnapshot(),
+      deps,
+      now: new Date("2026-08-20T06:17:00.000Z")
+    };
+    if (expectThrow) {
+      await assert.rejects(runHistoryCollection(params), expectThrow);
+    } else {
+      const result = await runHistoryCollection(params);
+      assert.equal(result.ok, false);
+    }
+    let historyUsable = false;
+    try {
+      const content = JSON.parse(await readFile(historyPath, "utf8"));
+      historyUsable = Boolean(content && typeof content === "object");
+    } catch {
+      historyUsable = false;
+    }
+    assert.equal(historyUsable, false, "El histórico stale no puede quedar utilizable tras un fallo.");
+    let quarantine = null;
+    try {
+      quarantine = JSON.parse(await readFile(join(siteDir, "history-quarantine.json"), "utf8"));
+    } catch {}
+    if (quarantineExpected) {
+      assert.ok(quarantine, "Debe existir manifest de cuarentena.");
+      validateQuarantineManifest(quarantine);
+    } else {
+      assert.equal(quarantine, null, "Los errores fatales de metadatos no generan manifest de assets.");
+    }
+  } finally {
+    await rm(siteDir, { recursive: true, force: true });
+  }
+}
+
+const failingStaleCases = [
+  {
+    name: "tag mensual inválido",
+    expectThrow: /tag inválido/,
+    quarantineExpected: false,
+    deps: () => ({
+      fetchJson: fakeFetchJson({ releasesPages: [[{ id: 9, tag_name: "quality-history-2026-13" }]] }),
+      fetchAssetBody: async () => ({ ok: true, status: 200, text: "{}" })
+    })
+  },
+  {
+    name: "release sin id",
+    expectThrow: /sin identificador válido/,
+    quarantineExpected: false,
+    deps: () => ({
+      fetchJson: fakeFetchJson({ releasesPages: [[{ tag_name: "quality-history-2026-08" }]] }),
+      fetchAssetBody: async () => ({ ok: true, status: 200, text: "{}" })
+    })
+  },
+  {
+    name: "respuesta API malformada",
+    expectThrow: /releases históricos no es válida/,
+    quarantineExpected: false,
+    deps: () => ({
+      fetchJson: async () => ({ ok: true, status: 200, data: null }),
+      fetchAssetBody: async () => ({ ok: true, status: 200, text: "{}" })
+    })
+  },
+  {
+    name: "error HTTP listando releases",
+    expectThrow: /No se pudo consultar el histórico persistente/,
+    quarantineExpected: false,
+    deps: () => ({
+      fetchJson: async () => ({ ok: false, status: 503 }),
+      fetchAssetBody: async () => ({ ok: true, status: 200, text: "{}" })
+    })
+  },
+  {
+    name: "error HTTP en búsqueda global de persistencia no aplica; límite de paginación",
+    expectThrow: /límite de paginación/,
+    quarantineExpected: false,
+    deps: () => {
+      let page = 0;
+      return {
+        fetchJson: async (path) => {
+          if (!path.includes("/releases?per_page=")) return { ok: true, status: 200, data: [] };
+          page += 1;
+          return {
+            ok: true,
+            status: 200,
+            data: [
+              { id: page * 10, tag_name: "quality-history-2026-0" + ((page % 9) + 1) },
+              { id: page * 10 + 1, tag_name: "release-ajeno-" + page }
+            ]
+          };
+        },
+        fetchAssetBody: async () => ({ ok: true, status: 200, text: "{}" }),
+        perPage: 2
+      };
+    }
+  },
+  {
+    name: "fallo descargando un asset",
+    expectThrow: null,
+    quarantineExpected: true,
+    deps: () => ({
+      fetchJson: fakeFetchJson({
+        releasesPages: baseReleasesPage(),
+        assetsByRelease: { 1: [[asset(10, `quality-snapshot-${"e".repeat(64)}.json`)]] }
+      }),
+      fetchAssetBody: async () => ({ ok: false, status: 503 })
+    })
+  },
+  {
+    name: "snapshot inválido",
+    expectThrow: null,
+    quarantineExpected: true,
+    deps: () => ({
+      fetchJson: fakeFetchJson({
+        releasesPages: baseReleasesPage(),
+        assetsByRelease: { 1: [[asset(10, `quality-snapshot-${"e".repeat(64)}.json`)]] }
+      }),
+      fetchAssetBody: async () => ({ ok: true, status: 200, text: "{}" })
+    })
+  }
+];
+
+function baseReleasesPage() {
+  return [[{ id: 1, tag_name: "quality-history-2026-08" }]];
+}
+
+for (const failingCase of failingStaleCases) {
+  await expectStaleHistoryQuarantined({
+    deps: failingCase.deps(),
+    expectThrow: failingCase.expectThrow,
+    quarantineExpected: failingCase.quarantineExpected
+  });
+}
+
+{
+  const first = historicalSnapshot();
+  let bodyCalls = 0;
+  await assert.rejects(
+    collectWith({
+      releasesPages: [
+        [{ id: 1, tag_name: "quality-history-2026-08" }, { id: 2, tag_name: "quality-history-2026-07" }],
+        [{ id: 3, tag_name: "quality-history-2026-13" }]
+      ],
+      assetsByRelease: {
+        1: [[asset(11, `quality-snapshot-${first.id}.json`)]],
+        2: [],
+        3: []
+      },
+      fetchAssetBody: async () => {
+        bodyCalls += 1;
+        return { ok: true, status: 200, text: JSON.stringify(first) };
+      }
+    }),
+    /tag inválido/
+  );
+  assert.equal(bodyCalls, 0, "El aborto por tag inválido ocurre antes de descargar cualquier asset.");
+}
+
+{
+  const siteDir = await mkdtemp(join(tmpdir(), "pq-ox07-releaseid-"));
+  try {
+    await writeFile(join(siteDir, "history.json"), "{\"stale\":true}\n");
+    await assert.rejects(
+      runHistoryCollection({
+        siteDir,
+        repository: "AlexFrigenti/project-quality",
+        token: "test-token",
+        currentSnapshot: historicalSnapshot(),
+        deps: {
+          fetchJson: fakeFetchJson({ releasesPages: [[{ tag_name: "quality-history-2026-08" }]] }),
+          fetchAssetBody: async () => ({ ok: true, status: 200, text: "{}" })
+        },
+        now: new Date("2026-08-20T06:17:00.000Z")
+      }),
+      /Release histórico sin identificador válido: quality-history-2026-08/
+    );
+    let remaining = null;
+    try {
+      remaining = JSON.parse(await readFile(join(siteDir, "history.json"), "utf8"));
+    } catch {}
+    assert.equal(remaining, null, "Sin history.json residual utilizable.");
+    let manifest = null;
+    try {
+      manifest = JSON.parse(await readFile(join(siteDir, "history-quarantine.json"), "utf8"));
+    } catch {}
+    assert.equal(manifest, null, "Error fatal de metadatos: sin manifest con ids fabricados.");
+  } finally {
+    await rm(siteDir, { recursive: true, force: true });
+  }
 }
 
 console.log("Contrato de cuarentena histórica válido.");

@@ -36,7 +36,7 @@
         "detail"
       ],
       "properties": {
-        "releaseTag": { "type": "string", "pattern": "^quality-history-\\d{4}-\\d{2}$" },
+        "releaseTag": { "type": "string", "pattern": "^quality-history-\\d{4}-(?:0[1-9]|1[0-2])$" },
         "releaseId": { "type": ["integer", "null"], "minimum": 1 },
         "assetId": { "type": ["integer", "null"], "minimum": 1 },
         "assetName": { "type": "string", "pattern": "^quality-snapshot-[^\\s]{1,140}$", "maxLength": 160 },

@@ -52,6 +52,8 @@ Los assets ajenos al namespace histórico no son snapshots: se ignoran deliberad
 
 Si existe al menos una entrada, el comportamiento es fail-closed: se escribe `site/history-quarantine.json` como artifact de diagnóstico del workflow, la colección termina con error, se elimina cualquier `history.json` previo para que no quede un histórico antiguo utilizable ni desplegable, y no se genera ni publica ningún índice parcial. Los identificadores de release o asset ausentes o no numéricos se registran como `null` en la manifest; nunca se fabrican. La corrección de un asset corrupto exige decisión humana fuera del pipeline.
 
+Los fallos fatales de metadatos (release del namespace sin identificador válido, tag con mes inválido, API malformada o error HTTP en el listado, límite de paginación superado) no generan manifest de assets: abortan la colección con error explícito y eliminan igualmente cualquier `history.json` previo.
+
 ## Deduplicación determinista
 
 El índice colapsa snapshots con el mismo `id` en un único representante elegido de forma independiente del orden de llegada: gana el `generatedAt` mayor y, en empate, el JSON canónico (claves ordenadas) menor lexicográficamente. Esto hace irrelevante el orden de descarga entre releases y meses, tanto para snapshots legacy v1 como semantic v2, sin mutar las entradas recibidas.

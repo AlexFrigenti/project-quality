@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import { buildHistoryIndex } from "./collect-quality-history.mjs";
+import { PAGINATION_LIMITS as PERSIST_PAGINATION_LIMITS } from "./history-pagination.mjs";
 import { buildQualityHistorySnapshot, persistSnapshot, snapshotId } from "./persist-quality-history.mjs";
 import { legacyHistorySnapshot } from "./fixture-history-legacy.mjs";
 import { validateQualityHistory } from "./validate-quality-history.mjs";
@@ -404,6 +405,124 @@ function createPersistDeps({ releasePages, assetsByReleaseId, existingMonthlyRel
     assert.equal(/\/releases\/assets\/\d+$/.test(call.path), false);
   }
   assert.equal(calls.requests.some((call) => call.method === "DELETE"), false);
+}
+
+function historyPages({ totalPages, fullExceptLast = false, targetOnPage = null, targetSnapshotId = null }) {
+  const pages = [];
+  for (let index = 0; index < totalPages; index += 1) {
+    const isLast = index === totalPages - 1;
+    const month = String((index % 12) + 1).padStart(2, "0");
+    if (targetOnPage !== null && index === targetOnPage) {
+      const releaseId = index * 10;
+      pages.push([{ id: releaseId, tag_name: "quality-history-2026-" + month }]);
+      continue;
+    }
+    const firstItem = { id: index * 10, tag_name: "quality-history-2026-" + month };
+    if (isLast && (fullExceptLast || targetOnPage !== null)) {
+      pages.push(targetOnPage !== null && isLast
+        ? [{ ...firstItem }]
+        : [firstItem]);
+      continue;
+    }
+    pages.push([
+      firstItem,
+      { id: index * 10 + 1, tag_name: "release-ajeno-" + index }
+    ]);
+  }
+  return pages;
+}
+
+{
+  const target = structuredClone(first);
+  const assetName = "quality-snapshot-" + target.id + ".json";
+  const totalPages = PERSIST_PAGINATION_LIMITS.maxReleasePages;
+  const releasePages = [];
+  for (let index = 0; index < totalPages; index += 1) {
+    releasePages.push(
+      index === totalPages - 1
+        ? [{ id: index * 10, tag_name: "quality-history-2026-" + String((index % 12) + 1).padStart(2, "0") }]
+        : [{ id: index * 10, tag_name: "quality-history-2026-" + String((index % 12) + 1).padStart(2, "0") }, { id: index * 10 + 1, tag_name: "release-ajeno-" + index }]
+    );
+  }
+  const { deps, calls } = createPersistDeps({
+    releasePages,
+    assetsByReleaseId: {},
+    existingMonthlyRelease: null
+  });
+  const result = await persistSnapshot(target, { repository: "AlexFrigenti/project-quality", token: "test-token", deps: { ...deps, perPage: 2 } });
+  assert.equal(result.created, true);
+  assert.equal(calls.uploads.length, 1);
+  const listingCalls = calls.requests.filter((call) => call.path.includes("/releases?per_page="));
+  assert.equal(listingCalls.length, totalPages, "La búsqueda global recorre exactamente las páginas necesarias.");
+}
+
+{
+  const target = structuredClone(first);
+  const totalPages = PERSIST_PAGINATION_LIMITS.maxReleasePages;
+  const releasePages = [];
+  for (let index = 0; index < totalPages; index += 1) {
+    releasePages.push([
+      { id: index * 10, tag_name: "quality-history-2026-" + String((index % 12) + 1).padStart(2, "0") },
+      { id: index * 10 + 1, tag_name: "release-ajeno-" + index }
+    ]);
+  }
+  const { deps } = createPersistDeps({ releasePages, assetsByReleaseId: {}, existingMonthlyRelease: null });
+  await assert.rejects(
+    persistSnapshot(target, { repository: "AlexFrigenti/project-quality", token: "test-token", deps: { ...deps, perPage: 2 } }),
+    /límite de paginación/,
+    "100 páginas llenas en la búsqueda global abortan explícitamente."
+  );
+}
+
+for (const badData of [null, "texto"]) {
+  const target = structuredClone(first);
+  const { deps } = createPersistDeps({ releasePages: [], assetsByReleaseId: {} });
+  const brokenRequest = async () => ({ ok: true, status: 200, data: badData });
+  await assert.rejects(
+    persistSnapshot(target, { repository: "AlexFrigenti/project-quality", token: "test-token", deps: { request: brokenRequest } }),
+    /releases históricos no es válida/
+  );
+}
+
+{
+  const target = structuredClone(first);
+  const { deps } = createPersistDeps({ releasePages: [], assetsByReleaseId: {} });
+  await assert.rejects(
+    persistSnapshot(target, { repository: "AlexFrigenti/project-quality", token: "test-token", deps: { request: async () => ({ ok: false, status: 500 }) } }),
+    /No se pudo consultar el histórico persistente/
+  );
+}
+
+{
+  const target = structuredClone(first);
+  const assetName = "quality-snapshot-" + target.id + ".json";
+  const farPage = 49;
+  const releasePages = [];
+  const assetsByReleaseId = {};
+  for (let index = 0; index <= farPage; index += 1) {
+    const month = String((index % 12) + 1).padStart(2, "0");
+    if (index < farPage) {
+      releasePages.push([
+        { id: index * 10, tag_name: "quality-history-2026-" + month },
+        { id: index * 10 + 1, tag_name: "release-ajeno-" + index }
+      ]);
+      assetsByReleaseId[index * 10] = [];
+      assetsByReleaseId[index * 10 + 1] = [];
+    } else {
+      releasePages.push([{ id: index * 10, tag_name: "quality-history-2026-" + month }]);
+      assetsByReleaseId[index * 10] = [{ id: index * 100, name: assetName }];
+    }
+  }
+  const { deps, calls } = createPersistDeps({
+    releasePages,
+    assetsByReleaseId,
+    existingMonthlyRelease: { id: 800, tag_name: "quality-history-2026-08" }
+  });
+  const result = await persistSnapshot(target, { repository: "AlexFrigenti/project-quality", token: "test-token", deps: { ...deps, perPage: 2 } });
+  assert.equal(result.created, false);
+  assert.equal(result.existingRelease.id, farPage * 10);
+  assert.equal(calls.creates, 0);
+  assert.equal(calls.uploads.length, 0, "Un asset en una página lejana evita crear y subir.");
 }
 
 console.log("Histórico de calidad válido.");

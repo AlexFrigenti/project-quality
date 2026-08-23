@@ -198,10 +198,15 @@ export async function collectQualityHistory({ repository, token, currentSnapshot
 }
 
 export async function runHistoryCollection({ siteDir = "site", repository, token, currentSnapshot, deps = {}, now = new Date() } = {}) {
-  const result = await collectQualityHistory({ repository, token, currentSnapshot, deps, now });
   const historyPath = resolve(siteDir, "history.json");
   const quarantinePath = resolve(siteDir, "history-quarantine.json");
-
+  let result;
+  try {
+    result = await collectQualityHistory({ repository, token, currentSnapshot, deps, now });
+  } catch (error) {
+    await rm(historyPath, { force: true });
+    throw error;
+  }
   if (!result.ok) {
     await writeFile(quarantinePath, JSON.stringify(result.quarantine, null, 2) + "\n");
     await rm(historyPath, { force: true });
