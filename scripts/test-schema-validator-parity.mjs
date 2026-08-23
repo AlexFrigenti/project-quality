@@ -34,8 +34,28 @@ function assertGateRelations(gate, label) {
 const metrics = await schema("schemas/quality-metrics.schema.json");
 const history = await schema("schemas/quality-history.schema.json");
 const historyIndex = await schema("schemas/quality-history-index.schema.json");
+const quarantine = await schema("schemas/quality-history-quarantine.schema.json");
 const nodeWorkflow = await readFile(".github/workflows/node-quality.yml", "utf8");
 const staticWorkflow = await readFile(".github/workflows/static-quality.yml", "utf8");
+const dashboardWorkflow = await readFile(".github/workflows/quality-dashboard.yml", "utf8");
+
+{
+  const pullRequestSection = dashboardWorkflow.split(/pull_request:/)[1].split(/\n\s{2}push:/)[0];
+  const listedPaths = new Set(
+    [...pullRequestSection.matchAll(/-\s+"([^"]+)"/g)].map((match) => match[1])
+  );
+  const requiredPullRequestPaths = [
+    "scripts/main-protection.mjs",
+    "scripts/test-main-protection.mjs",
+    "scripts/dashboard-contract.mjs",
+    "scripts/quality-contract.mjs",
+    "scripts/test-schema-validator-parity.mjs",
+    "scripts/test-node-quality-workflow-crlf.mjs"
+  ];
+  for (const requiredPath of requiredPullRequestPaths) {
+    assert(listedPaths.has(requiredPath), `pull_request.paths debe conservar ${requiredPath}`);
+  }
+}
 
 assert.match(nodeWorkflow, /sparse-checkout:[\s\S]*scripts\/quality-contract\.mjs/);
 assert.match(staticWorkflow, /sparse-checkout:[\s\S]*scripts\/quality-contract\.mjs/);
