@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import { buildHistoryIndex } from "./collect-quality-history.mjs";
-import { buildQualityHistorySnapshot, snapshotId } from "./persist-quality-history.mjs";
+import { buildQualityHistorySnapshot, persistSnapshot, snapshotId } from "./persist-quality-history.mjs";
 import { legacyHistorySnapshot } from "./fixture-history-legacy.mjs";
 import { validateQualityHistory } from "./validate-quality-history.mjs";
 import { validateQualityHistoryIndex } from "./validate-quality-history-index.mjs";
@@ -307,6 +307,89 @@ assert.equal(
     details: "Gate repetido."
   });
   assert.throws(() => validateQualityHistory(duplicatedGate), /gates contiene un id duplicado: tests/);
+}
+
+function createPersistDeps({ releasePages, assetsByReleaseId, existingMonthlyRelease = null } = {}) {
+  const calls = { requests: [], creates: 0, uploads: [] };
+  const request = async (path, options = {}) => {
+    calls.requests.push({ method: options.method || "GET", path });
+    if (path.includes("/releases?per_page=")) {
+      const page = Number(new URLSearchParams(path.split("?")[1] || "").get("page"));
+      return { ok: true, status: 200, data: releasePages[page - 1] ?? [] };
+    }
+    const assetsMatch = path.match(/\/releases\/(\d+)\/assets/);
+    if (assetsMatch) {
+      return { ok: true, status: 200, data: assetsByReleaseId[assetsMatch[1]] ?? [] };
+    }
+    const tagMatch = path.match(/\/releases\/tags\/(.+)$/);
+    if (tagMatch) {
+      if (existingMonthlyRelease && existingMonthlyRelease.tag_name === decodeURIComponent(tagMatch[1])) {
+        return { ok: true, status: 200, data: existingMonthlyRelease };
+      }
+      return { ok: false, status: 404, data: null };
+    }
+    if (path.endsWith("/releases") && options.method === "POST") {
+      calls.creates += 1;
+      return {
+        ok: true,
+        status: 201,
+        data: { id: 900, tag_name: "quality-history-" + periodTag(options.body), upload_url: "https://upload.invalid/repos/o/r/releases/900/assets{?name,label}" }
+      };
+    }
+    return { ok: false, status: 404, data: null };
+  };
+  function periodTag(body) {
+    try {
+      return JSON.parse(body).tag_name.replace("quality-history-", "");
+    } catch {
+      return "1970-01";
+    }
+  }
+  const upload = async ({ name, content }) => {
+    calls.uploads.push({ name, content });
+  };
+  return { deps: { request, upload }, calls };
+}
+
+{
+  const target = structuredClone(first);
+  const assetName = "quality-snapshot-" + target.id + ".json";
+  const oldRelease = { id: 7, tag_name: "quality-history-2026-07" };
+  const { deps, calls } = createPersistDeps({
+    releasePages: [[oldRelease]],
+    assetsByReleaseId: { 7: [{ id: 70, name: assetName }] },
+    existingMonthlyRelease: { id: 800, tag_name: "quality-history-2026-08" }
+  });
+  const result = await persistSnapshot(target, {
+    repository: "AlexFrigenti/project-quality",
+    token: "test-token",
+    deps
+  });
+  assert.equal(result.created, false);
+  assert.equal(result.assetName, assetName);
+  assert.equal(result.existingRelease.tag, "quality-history-2026-07");
+  assert.equal(result.existingRelease.id, 7);
+  assert.equal(calls.creates, 0, "No debe crear un release nuevo si el asset ya existe.");
+  assert.equal(calls.uploads.length, 0, "No debe subir un asset duplicado.");
+  assert.equal(calls.requests.some((call) => call.method === "DELETE"), false, "Nunca debe emitirse DELETE.");
+}
+
+{
+  const target = structuredClone(first);
+  const { deps, calls } = createPersistDeps({
+    releasePages: [[{ id: 7, tag_name: "quality-history-2026-07" }]],
+    assetsByReleaseId: { 7: [{ id: 70, name: "quality-snapshot-" + "f".repeat(64) + ".json" }] },
+    existingMonthlyRelease: null
+  });
+  const result = await persistSnapshot(target, {
+    repository: "AlexFrigenti/project-quality",
+    token: "test-token",
+    deps
+  });
+  assert.equal(result.created, true);
+  assert.equal(calls.uploads.length, 1, "Debe subir exactamente una vez cuando el asset no existe.");
+  assert.equal(calls.uploads[0].name, result.assetName);
+  assert.equal(calls.requests.some((call) => call.method === "DELETE"), false);
 }
 
 console.log("Histórico de calidad válido.");
