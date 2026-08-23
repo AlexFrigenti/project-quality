@@ -4,6 +4,9 @@ import { join } from "node:path";
 
 // Allowlist explícita de majors compatibles con el runtime Node 24,
 // verificada contra el campo runs.using del action.yml oficial de cada tag.
+// upload-pages-artifact es composite: su v4 envuelve actions/upload-artifact@v4
+// (Node 20), por lo que SOLO su v5 (que envuelve upload-artifact en Node 24)
+// está permitida.
 const ALLOWED_MAJORS = new Map([
   ["actions/checkout", new Set(["v6", "v7"])],
   ["actions/setup-node", new Set(["v6", "v7"])],
@@ -11,17 +14,12 @@ const ALLOWED_MAJORS = new Map([
   ["actions/download-artifact", new Set(["v7", "v8"])],
   ["actions/configure-pages", new Set(["v6"])],
   ["actions/deploy-pages", new Set(["v5"])],
-  ["actions/upload-pages-artifact", new Set(["v4", "v5"])]
+  ["actions/upload-pages-artifact", new Set(["v5"])]
 ]);
 
 const PROJECT_NODE_VERSION = '"22"';
 
-const workflowDir = ".github/workflows";
-const files = (await readdir(workflowDir)).filter((file) => file.endsWith(".yml")).sort();
-assert.ok(files.includes("main-quality-gate.yml"), "Debe existir el workflow main-quality-gate.yml");
-
-for (const file of files) {
-  const content = await readFile(join(workflowDir, file), "utf8");
+function validateContent(file, content) {
   const lines = content.split(/\r?\n/);
   for (let index = 0; index < lines.length; index += 1) {
     const match = lines[index].match(/^\s*(?:-\s+)?uses:\s*(\S+)\s*$/);
@@ -53,6 +51,38 @@ for (const file of files) {
       `${file}: node-version debe permanecer en ${PROJECT_NODE_VERSION} (runtime del proyecto)`
     );
   }
+}
+
+const workflowDir = ".github/workflows";
+const files = (await readdir(workflowDir)).filter((file) => file.endsWith(".yml")).sort();
+assert.ok(files.includes("main-quality-gate.yml"), "Debe existir el workflow main-quality-gate.yml");
+
+for (const file of files) {
+  validateContent(file, await readFile(join(workflowDir, file), "utf8"));
+}
+
+{
+  // Regresión sintética: upload-pages-artifact@v4 es composite y envuelve
+  // actions/upload-artifact@v4 (Node 20). El contrato debe rechazarlo.
+  const synthetic = [
+    "name: synthetic",
+    "on: push",
+    "jobs:",
+    "  demo:",
+    "    runs-on: ubuntu-latest",
+    "    steps:",
+    "      - uses: actions/upload-pages-artifact@v5",
+    "      - uses: actions/upload-pages-artifact@v4"
+  ].join("\n");
+  assert.doesNotThrow(
+    () => validateContent("synthetic-v5.yml", synthetic.replace("@v4", "@v5")),
+    "upload-pages-artifact@v5 debe seguir aceptándose."
+  );
+  assert.throws(
+    () => validateContent("synthetic-v4.yml", synthetic),
+    /upload-pages-artifact@v4 usa el major v4, basado en Node 20/,
+    "upload-pages-artifact@v4 debe rechazarse: internamente usa upload-artifact@v4 (Node 20)."
+  );
 }
 
 console.log("Actions runtime contract válido.");
