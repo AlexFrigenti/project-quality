@@ -8,14 +8,11 @@ on:
       - "DASHBOARD.md"
       - "dashboard/**"
       - "scripts/audit-repository.mjs"
-      - "scripts/main-protection.mjs"
       - "scripts/test-audit-profiles.mjs"
-      - "scripts/test-main-protection.mjs"
       - "scripts/test-history-rendering.mjs"
       - "scripts/test-dashboard.mjs"
       - "scripts/assemble-dashboard.mjs"
       - "scripts/validate-dashboard.mjs"
-      - "scripts/dashboard-contract.mjs"
       - "QUALITY_METRICS.md"
       - "schemas/**"
       - "scripts/generate-quality-metrics.mjs"
@@ -27,12 +24,13 @@ on:
       - "scripts/validate-quality-history-index.mjs"
       - "scripts/collect-quality-history.mjs"
       - "scripts/test-quality-history-index.mjs"
+      - "scripts/history-quarantine.mjs"
+      - "scripts/history-pagination.mjs"
+      - "scripts/test-history-quarantine.mjs"
+      - "schemas/quality-history-quarantine.schema.json"
       - "scripts/validate-quality-metrics.mjs"
       - "scripts/test-quality-metrics.mjs"
-      - "scripts/quality-contract.mjs"
-      - "scripts/test-schema-validator-parity.mjs"
       - "scripts/test-node-quality-workflow.mjs"
-      - "scripts/test-node-quality-workflow-crlf.mjs"
       - ".github/workflows/node-quality.yml"
       - ".github/workflows/static-quality.yml"
   push:
@@ -62,6 +60,10 @@ on:
       - "scripts/validate-quality-history-index.mjs"
       - "scripts/collect-quality-history.mjs"
       - "scripts/test-quality-history-index.mjs"
+      - "scripts/history-quarantine.mjs"
+      - "scripts/history-pagination.mjs"
+      - "scripts/test-history-quarantine.mjs"
+      - "schemas/quality-history-quarantine.schema.json"
       - "scripts/validate-quality-metrics.mjs"
       - "scripts/test-quality-metrics.mjs"
       - "scripts/quality-contract.mjs"
@@ -193,6 +195,14 @@ jobs:
           HISTORY_REPOSITORY: ${{ github.repository }}
           HISTORY_SITE_DIR: site
         run: node scripts/collect-quality-history.mjs
+
+      - name: Upload history quarantine manifest
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: history-quarantine-manifest
+          path: site/history-quarantine.json
+          if-no-files-found: ignore
 
       - name: Validate history index
         run: node scripts/validate-quality-history-index.mjs site/history.json

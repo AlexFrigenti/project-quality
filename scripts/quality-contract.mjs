@@ -7,7 +7,7 @@ export const CONTRACT_PATTERNS = Object.freeze({
   rfc3339DateTime: "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(?:\\.\\d+)?(?:Z|[+-]\\d{2}:\\d{2})$",
   httpUrl: "^https?://",
   historyReleaseTag: "^quality-history-\\d{4}-\\d{2}$",
-  historyAssetName: "^quality-snapshot-[0-9a-f]{64}\\.json$"
+  historyAssetName: "^quality-snapshot-([0-9a-f]{64})\\.json$"
 });
 
 export const CONTRACT_REGEXP = Object.freeze({

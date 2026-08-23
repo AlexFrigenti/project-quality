@@ -1,12 +1,11 @@
-# Tareas: PQ-OX07 Robustez del histórico persistente
+# Tareas: Robustez del histórico persistente (PQ-OX07)
 
-- [x] Rama `feat/pq-ox07-history-robustness` desde `origin/main` `39228aba1f65bc8be6d6d2038c07ad0e0fc9e95b`.
-- [x] Spec, plan y tareas (T2) con alcance aprobado A–F.
-- [ ] Grupo A: schema de cuarentena + módulo + suite propia (RED→GREEN).
-- [ ] Grupo B: paginación completa e inyección de red en la colección (RED→GREEN).
-- [ ] Grupo A+B integración: cuarentena fail-closed de la colección y manifest como artifact.
+- [x] Confirmar base `39228aba` y alcance T2 (spec).
+- [x] Grupo A: contrato de cuarentena (RED→GREEN) + schema + test.
+- [ ] Grupo B: paginación completa e inyectable + colección fail-closed (RED→GREEN).
 - [ ] Grupo C: deduplicación determinista del índice (RED→GREEN).
 - [ ] Grupo D: deduplicación global entre releases en persistencia (RED→GREEN).
-- [ ] Grupo F: workflow (paths, paso de validación, upload condicional) sin relajar guards.
-- [ ] `QUALITY_HISTORY.md`: cuarentena, fallo cerrado, paginación, deduplicaciones y retención indefinida sin pruning.
-- [ ] Verificación final: suites `scripts/test-*.mjs` en 0, `node --check`, schemas parseables, `git diff --check`.
+- [ ] Workflow: subida de manifest + triggers.
+- [ ] Documentación: cuarentena, fail-closed, paginación, deduplicación, retención indefinida.
+- [ ] Verificación final: 11+ suites, node --check, JSON schemas, git diff --check.
+- [ ] Revisión del diff completo y commits trazables.

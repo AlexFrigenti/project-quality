@@ -88,6 +88,16 @@ function validateEntry(entry, path) {
   }
 }
 
+export function createQuarantineManifest({ generatedAt, entries }) {
+  const manifest = {
+    schemaVersion: 1,
+    generatedAt,
+    entries
+  };
+  validateQuarantineManifest(manifest);
+  return manifest;
+}
+
 export function validateQuarantineManifest(manifest) {
   if (manifest === null || typeof manifest !== "object" || Array.isArray(manifest)) {
     fail("La manifest de cuarentena debe ser un objeto");
