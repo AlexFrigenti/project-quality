@@ -6,7 +6,7 @@ export const CONTRACT_PATTERNS = Object.freeze({
   sha64: "^[0-9a-f]{64}$",
   rfc3339DateTime: "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(?:\\.\\d+)?(?:Z|[+-]\\d{2}:\\d{2})$",
   httpUrl: "^https?://",
-  historyReleaseTag: "^quality-history-\\d{4}-\\d{2}$",
+  historyReleaseTag: "^quality-history-\\d{4}-(?:0[1-9]|1[0-2])$",
   historyAssetName: "^quality-snapshot-([0-9a-f]{64})\\.json$"
 });
 

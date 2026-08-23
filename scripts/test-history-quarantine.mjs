@@ -102,6 +102,66 @@ assert.deepEqual(
 assert.equal(schema.$defs.entry.additionalProperties, false);
 assert.ok(schema.$defs.entry.properties.assetName.pattern.startsWith("^quality-snapshot-"));
 assert.ok(schema.$defs.entry.properties.releaseTag.pattern.startsWith("^quality-history-"));
+assert.deepEqual([...schema.$defs.entry.properties.releaseId.type].sort(), ["integer", "null"]);
+assert.deepEqual([...schema.$defs.entry.properties.assetId.type].sort(), ["integer", "null"]);
+
+{
+  const nulled = createQuarantineEntry({ ...baseEntry, releaseId: null, assetId: null });
+  assert.equal(nulled.releaseId, null);
+  assert.equal(nulled.assetId, null);
+  assert.doesNotThrow(() => validateQuarantineManifest(manifestWith([nulled])));
+  const omitted = createQuarantineEntry(rawEntryOmittedIds());
+  assert.equal(omitted.releaseId, null);
+  assert.equal(omitted.assetId, null);
+
+  for (const [expectedPattern, mutate] of [
+    [/releaseId de cuarentena no válido/, () => ({ releaseId: "abc" })],
+    [/assetId de cuarentena no válido/, () => ({ assetId: "abc" })]
+  ]) {
+    assert.throws(() => createQuarantineEntry({ ...baseEntry, ...mutate() }), expectedPattern);
+  }
+
+  assert.doesNotThrow(() => validateQuarantineManifest(manifestWith([rawEntry({ releaseId: null, assetId: null })])));
+  assert.throws(
+    () => validateQuarantineManifest(manifestWith([rawEntry({ assetId: "abc" })])),
+    /assetId de cuarentena no válido/
+  );
+}
+
+function rawEntryOmittedIds() {
+  return {
+    releaseTag: baseEntry.releaseTag,
+    assetName: baseEntry.assetName,
+    reason: baseEntry.reason,
+    detail: baseEntry.detail
+  };
+}
+
+for (const tag of ["quality-history-2026-01", "quality-history-2026-12"]) {
+  assert.doesNotThrow(() => createQuarantineEntry({ ...baseEntry, releaseTag: tag }), tag);
+}
+for (const tag of ["quality-history-2026-00", "quality-history-2026-13"]) {
+  assert.throws(
+    () => createQuarantineEntry({ ...baseEntry, releaseTag: tag }),
+    /releaseTag de cuarentena no válido/,
+    tag
+  );
+  assert.throws(
+    () => validateQuarantineManifest(manifestWith([rawEntry({ releaseTag: tag })])),
+    /releaseTag de cuarentena no válido/,
+    tag
+  );
+}
+
+{
+  assert.equal(/Bearer\s/.test(sanitizeQuarantineDetail("Authorization: Bearer abc123.def456")), false);
+  const withQuery = sanitizeQuarantineDetail("https://private.example/path?token=ghp_abcdefghijklmnop");
+  assert.equal(/https?:\/\//.test(withQuery), false);
+  assert.equal(/token=/.test(withQuery), false);
+  assert.equal(/ghp_/.test(sanitizeQuarantineDetail("ghp_sh")), false);
+  const long = sanitizeQuarantineDetail("r".repeat(150) + " https://leak.invalid/a?secret=zzz");
+  assert.equal(/https?:\/\//.test(long), false);
+}
 
 function historicalSnapshot({ gen = "2026-08-01T00:00:00.000Z" } = {}) {
   const snapshot = {
@@ -302,6 +362,35 @@ function collectWith({ releasesPages, assetsByRelease, fetchAssetBody, perPage =
     }),
     /límite de paginación/
   );
+}
+
+await assert.rejects(
+  collectWith({
+    releasesPages: [[{ id: 9, tag_name: "quality-history-2026-13" }]],
+    assetsByRelease: {}
+  }),
+  /tag inválido/
+);
+
+{
+  let bodyRequested = false;
+  const result = await collectWith({
+    releasesPages: [[{ id: 1, tag_name: "quality-history-2026-08" }]],
+    assetsByRelease: { 1: [[{ name: `quality-snapshot-${"e".repeat(64)}.json` }, { id: "no-numérico", name: `quality-snapshot-${"d".repeat(64)}.json` }]] },
+    fetchAssetBody: async () => {
+      bodyRequested = true;
+      return { ok: true, status: 200, text: "{}" };
+    }
+  });
+  assert.equal(bodyRequested, false, "Nunca debe intentarse descargar un asset sin id válido.");
+  assert.equal(result.ok, false);
+  assert.equal(result.quarantine.entries.length, 2);
+  for (const entry of result.quarantine.entries) {
+    assert.equal(entry.reason, "download-failed");
+    assert.equal(entry.assetId, null);
+    assert.match(entry.detail, /Identificador de asset ausente o no numérico/);
+  }
+  assert.equal(JSON.stringify(result.quarantine).includes('"assetId":1'), false, "Nunca debe fabricarse el id 1.");
 }
 
 console.log("Contrato de cuarentena histórica válido.");

@@ -37,8 +37,8 @@
       ],
       "properties": {
         "releaseTag": { "type": "string", "pattern": "^quality-history-\\d{4}-\\d{2}$" },
-        "releaseId": { "type": "integer", "minimum": 1 },
-        "assetId": { "type": "integer", "minimum": 1 },
+        "releaseId": { "type": ["integer", "null"], "minimum": 1 },
+        "assetId": { "type": ["integer", "null"], "minimum": 1 },
         "assetName": { "type": "string", "pattern": "^quality-snapshot-[^\\s]{1,140}$", "maxLength": 160 },
         "reason": { "enum": ["invalid-name", "download-failed", "invalid-json", "invalid-snapshot", "asset-id-mismatch"] },
         "detail": { "type": "string", "minLength": 1, "maxLength": 200 }

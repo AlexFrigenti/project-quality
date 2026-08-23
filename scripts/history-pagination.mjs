@@ -35,6 +35,13 @@ export async function listHistoryReleases(repository, fetchJson, { perPage = PAG
       return response.data;
     }
   });
+  for (const release of releases) {
+    const tag = release?.tag_name || "";
+    if (!tag.startsWith("quality-history-")) continue;
+    if (!CONTRACT_REGEXP.historyReleaseTag.test(tag)) {
+      fail("Release histórico con tag inválido: " + tag);
+    }
+  }
   return releases
     .filter((release) => CONTRACT_REGEXP.historyReleaseTag.test(release?.tag_name || ""))
     .sort((left, right) => {

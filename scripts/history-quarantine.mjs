@@ -28,16 +28,20 @@ export function sanitizeQuarantineDetail(value) {
     .slice(0, QUARANTINE_DETAIL_LIMIT);
 }
 
-function requirePositiveInteger(value, name) {
+function normalizeQuarantineId(value, name) {
+  if (value === null || value === undefined) return null;
   if (!Number.isInteger(value) || value < 1) fail(name + " de cuarentena no válido");
+  return value;
 }
 
 export function createQuarantineEntry({ releaseTag, releaseId, assetId, assetName, reason, detail }) {
   if (typeof releaseTag !== "string" || !CONTRACT_REGEXP.historyReleaseTag.test(releaseTag)) {
     fail("releaseTag de cuarentena no válido");
   }
-  requirePositiveInteger(releaseId, "releaseId");
-  requirePositiveInteger(assetId, "assetId");
+  const normalized = {
+    releaseId: normalizeQuarantineId(releaseId, "releaseId"),
+    assetId: normalizeQuarantineId(assetId, "assetId")
+  };
   if (typeof assetName !== "string" || !QUARANTINE_ASSET_NAME_REGEXP.test(assetName)) {
     fail("assetName de cuarentena no válido");
   }
@@ -45,8 +49,8 @@ export function createQuarantineEntry({ releaseTag, releaseId, assetId, assetNam
   const sanitized = sanitizeQuarantineDetail(detail);
   return {
     releaseTag,
-    releaseId,
-    assetId,
+    releaseId: normalized.releaseId,
+    assetId: normalized.assetId,
     assetName,
     reason,
     detail: sanitized
@@ -62,6 +66,12 @@ function validateEntry(entry, path) {
   }
   for (const key of QUARANTINE_ENTRY_KEYS) {
     if (!(key in entry)) fail(path + "." + key + " es obligatorio");
+  }
+  for (const idKey of ["releaseId", "assetId"]) {
+    const value = entry[idKey];
+    if (!(value === null || (Number.isInteger(value) && value >= 1))) {
+      fail(path + "." + idKey + " de cuarentena no válido");
+    }
   }
   if (
     typeof entry.detail !== "string"

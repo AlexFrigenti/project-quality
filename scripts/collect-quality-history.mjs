@@ -145,29 +145,33 @@ export async function collectQualityHistory({ repository, token, currentSnapshot
   const snapshots = currentSnapshot ? [currentSnapshot] : [];
 
   for (const release of await listHistoryReleases(repo, fetchJson, { perPage })) {
+    if (!Number.isInteger(release.id) || release.id < 1) {
+      throw new Error("Release histórico sin identificador válido: " + (release.tag_name || "?"));
+    }
     for (const asset of await listReleaseAssets(repo, release, fetchJson, { perPage })) {
       const name = typeof asset?.name === "string" ? asset.name : "";
       if (!name.startsWith("quality-snapshot-")) continue;
       const match = name.match(CONTRACT_REGEXP.historyAssetName);
+      const assetId = Number.isInteger(asset?.id) && asset.id >= 1 ? asset.id : null;
       if (!match) {
         entries.push(createQuarantineEntry({
           releaseTag: release.tag_name,
           releaseId: release.id,
-          assetId: asset.id,
+          assetId,
           assetName: name,
           reason: "invalid-name",
           detail: "El nombre no coincide con quality-snapshot-<sha256>.json."
         }));
         continue;
       }
-      if (!Number.isInteger(asset?.id) || asset.id < 1) {
+      if (assetId === null) {
         entries.push(createQuarantineEntry({
           releaseTag: release.tag_name,
           releaseId: release.id,
-          assetId: 1,
+          assetId: null,
           assetName: name,
-          reason: "invalid-name",
-          detail: "El asset no tiene un identificador válido."
+          reason: "download-failed",
+          detail: "Identificador de asset ausente o no numérico."
         }));
         continue;
       }
