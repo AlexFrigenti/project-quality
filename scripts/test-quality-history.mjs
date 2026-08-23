@@ -371,14 +371,24 @@ function createPersistDeps({ releasePages, assetsByReleaseId, existingMonthlyRel
   assert.equal(result.existingRelease.id, 7);
   assert.equal(calls.creates, 0, "No debe crear un release nuevo si el asset ya existe.");
   assert.equal(calls.uploads.length, 0, "No debe subir un asset duplicado.");
+  for (const call of calls.requests) {
+    assert.ok(call.method === "GET" || call.method === "POST", "Solo GET/POST en persistencia: " + call.method);
+    assert.equal(/\/releases\/assets\/\d+$/.test(call.path), false, "El contenido de un asset nunca se descarga ni modifica desde persistencia.");
+  }
   assert.equal(calls.requests.some((call) => call.method === "DELETE"), false, "Nunca debe emitirse DELETE.");
 }
 
 {
   const target = structuredClone(first);
   const { deps, calls } = createPersistDeps({
-    releasePages: [[{ id: 7, tag_name: "quality-history-2026-07" }]],
-    assetsByReleaseId: { 7: [{ id: 70, name: "quality-snapshot-" + "f".repeat(64) + ".json" }] },
+    releasePages: [
+      [{ id: 7, tag_name: "quality-history-2026-07" }],
+      [{ id: 8, tag_name: "quality-history-2026-06" }]
+    ],
+    assetsByReleaseId: {
+      7: [{ id: 70, name: "quality-snapshot-" + "f".repeat(64) + ".json" }],
+      8: []
+    },
     existingMonthlyRelease: null
   });
   const result = await persistSnapshot(target, {
@@ -389,6 +399,10 @@ function createPersistDeps({ releasePages, assetsByReleaseId, existingMonthlyRel
   assert.equal(result.created, true);
   assert.equal(calls.uploads.length, 1, "Debe subir exactamente una vez cuando el asset no existe.");
   assert.equal(calls.uploads[0].name, result.assetName);
+  for (const call of calls.requests) {
+    assert.ok(call.method === "GET" || call.method === "POST", "Solo GET/POST en persistencia: " + call.method);
+    assert.equal(/\/releases\/assets\/\d+$/.test(call.path), false);
+  }
   assert.equal(calls.requests.some((call) => call.method === "DELETE"), false);
 }
 

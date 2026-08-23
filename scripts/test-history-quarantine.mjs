@@ -1,12 +1,15 @@
 import assert from "node:assert/strict";
-import { readFile } from "node:fs/promises";
+import { mkdtemp, readFile, writeFile, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import {
   QUARANTINE_REASONS,
   createQuarantineEntry,
   sanitizeQuarantineDetail,
   validateQuarantineManifest
 } from "./history-quarantine.mjs";
-import { collectQualityHistory } from "./collect-quality-history.mjs";
+import { collectQualityHistory, runHistoryCollection } from "./collect-quality-history.mjs";
+import { listHistoryReleases, listReleaseAssets, PAGINATION_LIMITS } from "./history-pagination.mjs";
 import { snapshotId } from "./persist-quality-history.mjs";
 
 const baseEntry = {
@@ -391,6 +394,183 @@ await assert.rejects(
     assert.match(entry.detail, /Identificador de asset ausente o no numérico/);
   }
   assert.equal(JSON.stringify(result.quarantine).includes('"assetId":1'), false, "Nunca debe fabricarse el id 1.");
+}
+
+async function pageFetcherCases() {
+  const release = { id: 1, tag_name: "quality-history-2026-08" };
+  const full = [release, { id: 2, tag_name: "quality-history-2026-07" }];
+  const partial = [release];
+
+  {
+    const seenPages = [];
+    const releases = await listHistoryReleases("o/r", async (path) => {
+      const page = Number(new URLSearchParams(path.split("?")[1]).get("page"));
+      seenPages.push(page);
+      return { ok: true, status: 200, data: pagesOf(page) };
+      function pagesOf(p) {
+        return p === 1 ? full : p === 2 ? partial : [];
+      }
+    }, { perPage: 2 });
+    assert.equal(releases.length, 3, "Página llena seguida de incompleta: procesa todo.");
+    assert.deepEqual(seenPages, [1, 2]);
+  }
+
+  {
+    const pages = [];
+    for (let p = 1; p <= PAGINATION_LIMITS.maxReleasePages; p += 1) {
+      pages.push(p === PAGINATION_LIMITS.maxReleasePages ? partial : full);
+    }
+    const seenPages = [];
+    const releases = await listHistoryReleases("o/r", async (path) => {
+      const page = Number(new URLSearchParams(path.split("?")[1]).get("page"));
+      seenPages.push(page);
+      return { ok: true, status: 200, data: pages[page - 1] ?? [] };
+    }, { perPage: 2 });
+    assert.equal(seenPages.length, PAGINATION_LIMITS.maxReleasePages, "La página 100 incompleta termina con éxito.");
+    assert.equal(releases.length, (PAGINATION_LIMITS.maxReleasePages - 1) * 2 + 1);
+  }
+
+  {
+    const pages = [];
+    for (let p = 1; p <= PAGINATION_LIMITS.maxReleasePages; p += 1) pages.push(full);
+    await assert.rejects(
+      listHistoryReleases("o/r", async (path) => {
+        const page = Number(new URLSearchParams(path.split("?")[1]).get("page"));
+        return { ok: true, status: 200, data: pages[page - 1] ?? [] };
+      }, { perPage: 2 }),
+      /límite de paginación/
+    );
+  }
+
+  for (const badData of [null, "texto", { no: "array" }]) {
+    await assert.rejects(
+      listHistoryReleases("o/r", async () => ({ ok: true, status: 200, data: badData }), { perPage: 2 }),
+      /releases históricos no es válida/
+    );
+    await assert.rejects(
+      listReleaseAssets("o/r", release, async () => ({ ok: true, status: 200, data: badData }), { perPage: 2 }),
+      /assets del release 1 no es válida/
+    );
+  }
+
+  await assert.rejects(
+    listHistoryReleases("o/r", async () => ({ ok: false, status: 500 }), { perPage: 2 }),
+    /No se pudo consultar el histórico persistente/
+  );
+  await assert.rejects(
+    listReleaseAssets("o/r", release, async () => ({ ok: false, status: 500 }), { perPage: 2 }),
+    /No se pudieron consultar los assets/
+  );
+
+  function assetPageFetcher(pages) {
+    return async (path) => {
+      const page = Number(new URLSearchParams(path.split("?")[1]).get("page"));
+      return { ok: true, status: 200, data: pages[page - 1] ?? [] };
+    };
+  }
+  {
+    const assets = await listReleaseAssets("o/r", release, assetPageFetcher([full, partial]), { perPage: 2 });
+    assert.equal(assets.length, 3, "Assets: página llena seguida de incompleta procesa todo.");
+  }
+  {
+    const pages = [];
+    for (let p = 1; p <= PAGINATION_LIMITS.maxAssetPages; p += 1) pages.push(p === PAGINATION_LIMITS.maxAssetPages ? partial : full);
+    const assets = await listReleaseAssets("o/r", release, assetPageFetcher(pages), { perPage: 2 });
+    assert.equal(assets.length, (PAGINATION_LIMITS.maxAssetPages - 1) * 2 + 1, "Página 100 de assets incompleta termina con éxito.");
+  }
+  {
+    const pages = [];
+    for (let p = 1; p <= PAGINATION_LIMITS.maxAssetPages; p += 1) pages.push(full);
+    await assert.rejects(
+      listReleaseAssets("o/r", release, assetPageFetcher(pages), { perPage: 2 }),
+      /límite de paginación/
+    );
+  }
+}
+
+{
+  const siteDir = await mkdtemp(join(tmpdir(), "pq-ox07-stale-"));
+  try {
+    const staleHistoryPath = join(siteDir, "history.json");
+    await writeFile(staleHistoryPath, "{\"stale\":true}\n");
+
+    const currentSnapshot = historicalSnapshot();
+    const result = await runHistoryCollection({
+      siteDir,
+      repository: "AlexFrigenti/project-quality",
+      token: "test-token",
+      currentSnapshot,
+      deps: {
+        fetchJson: fakeFetchJson({
+          releasesPages: [[{ id: 1, tag_name: "quality-history-2026-08" }]],
+          assetsByRelease: { 1: [[asset(10, `quality-snapshot-${"e".repeat(64)}.json`)]] }
+        }),
+        fetchAssetBody: async () => ({ ok: true, status: 200, text: "{corrupto" })
+      },
+      now: new Date("2026-08-20T06:17:00.000Z")
+    });
+
+    assert.equal(result.ok, false);
+    const quarantine = JSON.parse(await readFile(join(siteDir, "history-quarantine.json"), "utf8"));
+    validateQuarantineManifest(quarantine);
+    let staleGone = false;
+    try {
+      await readFile(staleHistoryPath);
+    } catch {
+      staleGone = true;
+    }
+    assert.equal(staleGone, true, "El history.json antiguo no debe quedar utilizable tras un fallo.");
+  } finally {
+    await rm(siteDir, { recursive: true, force: true });
+  }
+}
+
+{
+  const siteDir = await mkdtemp(join(tmpdir(), "pq-ox07-ok-"));
+  try {
+    const good = historicalSnapshot();
+    const result = await runHistoryCollection({
+      siteDir,
+      repository: "AlexFrigenti/project-quality",
+      token: "test-token",
+      currentSnapshot: good,
+      deps: {
+        fetchJson: fakeFetchJson({
+          releasesPages: [[{ id: 1, tag_name: "quality-history-2026-08" }]],
+          assetsByRelease: { 1: [[asset(10, `quality-snapshot-${good.id}.json`)]] }
+        }),
+        fetchAssetBody: async () => ({ ok: true, status: 200, text: JSON.stringify(good) })
+      },
+      now: new Date("2026-08-20T06:17:00.000Z")
+    });
+    assert.equal(result.ok, true);
+    const index = JSON.parse(await readFile(join(siteDir, "history.json"), "utf8"));
+    assert.ok(index.snapshots.length >= 1);
+    let quarantineWritten = false;
+    try {
+      await readFile(join(siteDir, "history-quarantine.json"));
+      quarantineWritten = true;
+    } catch {}
+    assert.equal(quarantineWritten, false, "Sin corrupción no debe escribirse manifest de cuarentena.");
+  } finally {
+    await rm(siteDir, { recursive: true, force: true });
+  }
+}
+
+{
+  const workflowText = await readFile(".github/workflows/quality-dashboard.yml", "utf8");
+  const assembleStart = workflowText.indexOf("Assemble dashboard");
+  const deployStart = workflowText.indexOf("Deploy dashboard to Pages");
+  assert.ok(assembleStart > -1 && deployStart > assembleStart);
+  const assembleSection = workflowText.slice(assembleStart, deployStart);
+  assert.equal(/continue-on-error/.test(assembleSection), false, "Ningún continue-on-error puede ocultar el fallo del collector.");
+  assert.match(assembleSection, /Upload history quarantine manifest/);
+  assert.match(assembleSection, /if: always\(\)/);
+  assert.match(assembleSection, /if-no-files-found: ignore/);
+  assert.match(assembleSection, /site\/history-quarantine\.json/);
+  assert.equal(/path:\s*["']?site\/history\.json/.test(workflowText), false, "history.json nunca se sube como artifact propio.");
+  const guardMatches = workflowText.match(/needs\.assemble\.result == 'success'/g) || [];
+  assert.ok(guardMatches.length >= 2, "Los guards de history y deploy deben permanecer intactos.");
 }
 
 console.log("Contrato de cuarentena histórica válido.");

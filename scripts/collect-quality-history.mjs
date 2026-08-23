@@ -1,4 +1,4 @@
-import { readFile, writeFile } from "node:fs/promises";
+import { readFile, rm, writeFile } from "node:fs/promises";
 import { pathToFileURL } from "node:url";
 import { resolve } from "node:path";
 import { buildQualityHistorySnapshot } from "./persist-quality-history.mjs";
@@ -197,29 +197,41 @@ export async function collectQualityHistory({ repository, token, currentSnapshot
   return { ok: true, index: buildHistoryIndex(snapshots, { now }) };
 }
 
+export async function runHistoryCollection({ siteDir = "site", repository, token, currentSnapshot, deps = {}, now = new Date() } = {}) {
+  const result = await collectQualityHistory({ repository, token, currentSnapshot, deps, now });
+  const historyPath = resolve(siteDir, "history.json");
+  const quarantinePath = resolve(siteDir, "history-quarantine.json");
+
+  if (!result.ok) {
+    await writeFile(quarantinePath, JSON.stringify(result.quarantine, null, 2) + "\n");
+    await rm(historyPath, { force: true });
+    return { ok: false, quarantine: result.quarantine };
+  }
+
+  await writeFile(historyPath, JSON.stringify(result.index, null, 2) + "\n");
+  return { ok: true, index: result.index };
+}
+
 async function main() {
   const siteDir = process.env.HISTORY_SITE_DIR || "site";
   const repository = process.env.HISTORY_REPOSITORY || process.env.GITHUB_REPOSITORY;
   const token = process.env.GITHUB_TOKEN;
   const data = JSON.parse(await readFile(resolve(siteDir, "data.json"), "utf8"));
   const currentSnapshot = buildQualityHistorySnapshot(data);
-  const result = await collectQualityHistory({
+  const result = await runHistoryCollection({
+    siteDir,
     repository,
     token,
     currentSnapshot
   });
 
   if (!result.ok) {
-    const manifest = JSON.parse(JSON.stringify(result.quarantine));
-    if (TOKEN_PATTERN.test(JSON.stringify(manifest))) throw new Error("La manifest contiene un patrón que parece un token.");
-    await writeFile(resolve(siteDir, "history-quarantine.json"), JSON.stringify(manifest, null, 2) + "\n");
-    console.error("Histórico en cuarentena: " + manifest.entries.length + " asset(s) con problemas. No se genera history.json.");
-    console.error("Motivos por entrada: " + manifest.entries.map((entry) => entry.reason).join(", "));
+    console.error("Histórico en cuarentena: " + result.quarantine.entries.length + " asset(s) con problemas. No se genera history.json.");
+    console.error("Motivos por entrada: " + result.quarantine.entries.map((entry) => entry.reason).join(", "));
     process.exitCode = 1;
     return;
   }
 
-  await writeFile(resolve(siteDir, "history.json"), JSON.stringify(result.index, null, 2) + "\n");
   console.log("Índice histórico generado: " + result.index.snapshots.length + " snapshots.");
 }
 

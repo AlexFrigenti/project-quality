@@ -38,7 +38,7 @@ Cualquier valor de `identityVersion` distinto de 1 o 2 se rechaza en la validaci
 
 ## Colección con cuarentena fail-closed
 
-La colección recorre todas las páginas de releases y assets (filtrando los releases `quality-history-YYYY-MM`) hasta encontrar una página vacía o incompleta. Superar un límite interno de seguridad de paginación produce un fallo explícito: nunca se trunca silenciosamente.
+La colección recorre todas las páginas de releases y assets (filtrando los releases `quality-history-YYYY-MM`) hasta encontrar una página vacía o incompleta. Superar un límite interno de seguridad de paginación produce un fallo explícito: nunca se trunca silenciosamente. Los tags de release deben expresar un mes válido (`01` a `12`): un release del namespace con mes inválido aborta la colección con error explícito, nunca se trata como histórico válido ni se ignora en silencio.
 
 Los assets del namespace `quality-snapshot-*` se descargan y validan individualmente. Un problema verificable genera una entrada estructurada de cuarentena con causa tipada:
 
@@ -50,7 +50,7 @@ Los assets del namespace `quality-snapshot-*` se descargan y validan individualm
 
 Los assets ajenos al namespace histórico no son snapshots: se ignoran deliberadamente, sin semántica de snapshot y sin borrado. Las entradas de cuarentena se registran en un manifest cerrado (`schemas/quality-history-quarantine.schema.json`) con detalles acotados y sanitizados, sin URLs, tokens, headers ni cuerpos de respuesta; los assets afectados permanecen intactos en su release (cuarentena lógica, no destructiva).
 
-Si existe al menos una entrada, el comportamiento es fail-closed: se escribe `site/history-quarantine.json` como artifact de diagnóstico del workflow, la colección termina con error, y no se genera ni publica ningún `history.json` parcial. La corrección de un asset corrupto exige decisión humana fuera del pipeline.
+Si existe al menos una entrada, el comportamiento es fail-closed: se escribe `site/history-quarantine.json` como artifact de diagnóstico del workflow, la colección termina con error, se elimina cualquier `history.json` previo para que no quede un histórico antiguo utilizable ni desplegable, y no se genera ni publica ningún índice parcial. Los identificadores de release o asset ausentes o no numéricos se registran como `null` en la manifest; nunca se fabrican. La corrección de un asset corrupto exige decisión humana fuera del pipeline.
 
 ## Deduplicación determinista
 
