@@ -1,0 +1,53 @@
+name: Main quality gate
+
+on:
+  pull_request:
+    branches: [main]
+    types: [opened, synchronize, reopened, ready_for_review]
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    name: check
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Run all test suites
+        shell: bash
+        run: |
+          set -euo pipefail
+          for file in scripts/test-*.mjs; do
+            echo "Running $file"
+            node "$file"
+          done
+
+      - name: Validate syntax with node --check
+        shell: bash
+        run: |
+          set -euo pipefail
+          for file in scripts/*.mjs; do
+            echo "Checking $file"
+            node --check "$file"
+          done
+
+      - name: Validate JSON schemas are parseable
+        shell: bash
+        run: |
+          set -euo pipefail
+          for file in schemas/*.json; do
+            echo "Validating $file"
+            node -e "JSON.parse(require('fs').readFileSync(process.argv[1],'utf8'))" "$file"
+          done
