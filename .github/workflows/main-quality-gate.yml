@@ -1,0 +1,44 @@
+name: Main quality gate
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    name: check
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Run all test suites
+        run: |
+          for file in scripts/test-*.mjs; do
+            echo "Running $file"
+            node "$file"
+          done
+
+      - name: Validate syntax with node --check
+        run: |
+          for file in scripts/*.mjs; do
+            echo "Checking $file"
+            node --check "$file"
+          done
+
+      - name: Validate JSON schemas are parseable
+        run: |
+          node -e "JSON.parse(require('fs').readFileSync('schemas/quality-history.schema.json','utf8')); console.log('OK schemas/quality-history.schema.json')"
+          node -e "JSON.parse(require('fs').readFileSync('schemas/quality-history-index.schema.json','utf8')); console.log('OK schemas/quality-history-index.schema.json')"
+          node -e "JSON.parse(require('fs').readFileSync('schemas/quality-history-quarantine.schema.json','utf8')); console.log('OK schemas/quality-history-quarantine.schema.json')"
+          node -e "JSON.parse(require('fs').readFileSync('schemas/quality-metrics.schema.json','utf8')); console.log('OK schemas/quality-metrics.schema.json')"
