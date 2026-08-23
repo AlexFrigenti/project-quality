@@ -1,6 +1,7 @@
 import { readFile } from "node:fs/promises";
 import { buildHistoryIndex } from "./collect-quality-history.mjs";
 import { snapshotId } from "./persist-quality-history.mjs";
+import { canonicalJson } from "./quality-contract.mjs";
 import { validateQualityHistoryIndex } from "./validate-quality-history-index.mjs";
 
 function assert(condition, message) {
@@ -66,6 +67,48 @@ assert(mixedIndex.snapshots.length === 2, "El índice mixto debe conservar legac
 assert(mixedIndex.snapshots[0].id !== mixedIndex.snapshots[1].id, "Las identidades legacy y v2 deben ser distintas.");
 assert(!("identityVersion" in mixedIndex.snapshots.find((item) => item.id === legacyVariant.id)), "El snapshot legacy no debe reescribirse.");
 validateQualityHistoryIndex(mixedIndex);
+
+const duplicateNewest = structuredClone(newest);
+duplicateNewest.generatedAt = "2026-08-13T12:00:00.000Z";
+const duplicateOlder = structuredClone(newest);
+duplicateOlder.generatedAt = "2026-08-13T09:00:00.000Z";
+
+{
+  const forward = buildHistoryIndex([duplicateNewest, duplicateOlder]);
+  const backward = buildHistoryIndex([duplicateOlder, duplicateNewest]);
+  assert(forward.snapshots.length === 1, "Los duplicados deben colapsar en un representante.");
+  assert(backward.snapshots.length === 1, "Los duplicados deben colapsar en un representante.");
+  assert(forward.snapshots[0].generatedAt === duplicateNewest.generatedAt, "Debe ganar el generatedAt mayor.");
+  assert(backward.snapshots[0].generatedAt === duplicateNewest.generatedAt, "La selección no puede depender del orden de entrada.");
+}
+
+{
+  const tieA = structuredClone(newest);
+  tieA.repositories[0].quality.message = "aaa";
+  const tieB = structuredClone(newest);
+  tieB.repositories[0].quality.message = "bbb";
+  assert(tieA.id === tieB.id, "El mensaje está fuera de la identidad: mismos ids.");
+  const expectedCanonical = canonicalJson(tieA) <= canonicalJson(tieB) ? tieA : tieB;
+
+  const forward = buildHistoryIndex([tieA, tieB]);
+  const backward = buildHistoryIndex([tieB, tieA]);
+  assert(forward.snapshots.length === 1 && backward.snapshots.length === 1);
+  assert(
+    forward.snapshots[0].repositories[0].quality.message === expectedCanonical.repositories[0].quality.message,
+    "En empate debe ganar el JSON canónico menor."
+  );
+  assert(
+    backward.snapshots[0].repositories[0].quality.message === expectedCanonical.repositories[0].quality.message,
+    "El desempate canónico no puede depender del orden."
+  );
+}
+
+{
+  const before = structuredClone([newest, oldest]);
+  const index = buildHistoryIndex([newest, oldest]);
+  assert(canonicalJson([newest, oldest]) === canonicalJson(before), "buildHistoryIndex no debe mutar sus entradas.");
+  validateQualityHistoryIndex(index);
+}
 
 expectFailure(() => validateQualityHistoryIndex({
   ...index,

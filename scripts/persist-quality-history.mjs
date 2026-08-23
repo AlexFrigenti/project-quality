@@ -3,10 +3,12 @@ import { readFile } from "node:fs/promises";
 import { pathToFileURL } from "node:url";
 import { resolve } from "node:path";
 import {
+  canonicalJson,
   HISTORY_CURRENT_IDENTITY_VERSION,
   HISTORY_IDENTITY_VERSIONS
 } from "./quality-contract.mjs";
 import { validateQualityHistory } from "./validate-quality-history.mjs";
+import { listHistoryReleases, listReleaseAssets } from "./history-pagination.mjs";
 
 const API_ROOT = "https://api.github.com";
 const TOKEN_PATTERN = /(gh[pousr]_[A-Za-z0-9_]+|github_pat_[A-Za-z0-9_]+|Bearer\s+[A-Za-z0-9._-]+)/i;
@@ -211,17 +213,6 @@ function semanticIdentityFor(snapshot) {
   };
 }
 
-function canonicalJson(value) {
-  if (Array.isArray(value)) return "[" + value.map(canonicalJson).join(",") + "]";
-  if (value !== null && typeof value === "object") {
-    return "{" + Object.keys(value)
-      .sort()
-      .map((key) => JSON.stringify(key) + ":" + canonicalJson(value[key]))
-      .join(",") + "}";
-  }
-  return JSON.stringify(value);
-}
-
 export function snapshotId(snapshot) {
   const identityVersion = snapshot.identityVersion ?? 1;
   if (!HISTORY_IDENTITY_VERSIONS.has(identityVersion)) {
@@ -292,13 +283,13 @@ async function githubRequest(path, { token, method = "GET", body, accept } = {})
   return { ok: response.ok, status: response.status, data };
 }
 
-async function getOrCreateRelease({ repository, period, token, targetCommit }) {
+async function getOrCreateRelease({ repository, period, token, targetCommit, request = githubRequest }) {
   const tag = "quality-history-" + period;
-  const existing = await githubRequest(`/repos/${repository}/releases/tags/${tag}`, { token });
+  const existing = await request(`/repos/${repository}/releases/tags/${tag}`, { token });
   if (existing.ok) return existing.data;
   if (existing.status !== 404) throw new Error("No se pudo consultar el release histórico.");
 
-  const created = await githubRequest(`/repos/${repository}/releases`, {
+  const created = await request(`/repos/${repository}/releases`, {
     token,
     method: "POST",
     body: {
@@ -313,12 +304,6 @@ async function getOrCreateRelease({ repository, period, token, targetCommit }) {
   });
   if (!created.ok) throw new Error("No se pudo crear el release histórico.");
   return created.data;
-}
-
-async function listAssets(release, repository, token) {
-  const response = await githubRequest(`/repos/${repository}/releases/${release.id}/assets?per_page=100`, { token });
-  if (!response.ok) throw new Error("No se pudieron consultar los assets históricos.");
-  return response.data?.filter((asset) => asset && typeof asset.name === "string") || [];
 }
 
 async function uploadAsset(release, name, content, token) {
@@ -336,17 +321,33 @@ async function uploadAsset(release, name, content, token) {
   if (!response.ok) throw new Error("No se pudo publicar el asset histórico.");
 }
 
-export async function persistSnapshot(snapshot, { repository, token, targetCommit } = {}) {
+export async function persistSnapshot(snapshot, { repository, token, targetCommit, deps = {} } = {}) {
   const repo = requireText(repository, "GITHUB_REPOSITORY");
   const secret = requireText(token, "GITHUB_TOKEN");
   validateQualityHistory(snapshot);
   const period = snapshot.generatedAt.slice(0, 7);
-  const release = await getOrCreateRelease({ repository: repo, period, token: secret, targetCommit: targetCommit || "main" });
   const assetName = "quality-snapshot-" + snapshot.id + ".json";
-  const assets = await listAssets(release, repo, secret);
-  if (assets.some((asset) => asset.name === assetName)) return { created: false, period, assetName };
+
+  const request = deps.request || githubRequest;
+  const performUpload = deps.upload || (({ release, name, content }) => uploadAsset(release, name, content, secret));
+  const perPage = deps.perPage;
+
+  const fetchJson = async (path) => request(path, { token: secret });
+  for (const release of await listHistoryReleases(repo, fetchJson, { perPage })) {
+    const assets = await listReleaseAssets(repo, release, fetchJson, { perPage });
+    if (assets.some((asset) => asset?.name === assetName)) {
+      return {
+        created: false,
+        period,
+        assetName,
+        existingRelease: { id: release.id, tag: release.tag_name }
+      };
+    }
+  }
+
+  const release = await getOrCreateRelease({ repository: repo, period, token: secret, targetCommit: targetCommit || "main", request });
   const content = JSON.stringify(snapshot, null, 2) + "\n";
-  await uploadAsset(release, assetName, content, secret);
+  await performUpload({ release, name: assetName, content });
   return { created: true, period, assetName };
 }
 
