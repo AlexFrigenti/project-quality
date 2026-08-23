@@ -42,6 +42,9 @@ export const EVIDENCE_KINDS = new Set(["workflow-run", "workflow-step", "artifac
 export const PROCESS_STATUSES = new Set(["pass", "warning", "fail", "unknown", "pending", "missing", "not_applicable"]);
 export const QUALITY_STATUSES = new Set(["current", "pending", "unavailable"]);
 
+export const HISTORY_IDENTITY_VERSIONS = Object.freeze(new Set([1, 2]));
+export const HISTORY_CURRENT_IDENTITY_VERSION = 2;
+
 export const QUALITY_METRICS_KEYS = Object.freeze({
   root: new Set(["schemaVersion", "project", "commit", "run", "standard", "conclusion", "gates", "metrics", "evidence"]),
   project: new Set(["id", "name", "repository", "kind"]),
@@ -53,7 +56,7 @@ export const QUALITY_METRICS_KEYS = Object.freeze({
 });
 
 export const QUALITY_HISTORY_KEYS = Object.freeze({
-  root: new Set(["schemaVersion", "id", "generatedAt", "dashboardCommitSha", "standard", "repositories"]),
+  root: new Set(["schemaVersion", "identityVersion", "id", "generatedAt", "dashboardCommitSha", "standard", "repositories"]),
   standard: new Set(["release", "sha"]),
   process: new Set(["overall", "mainProtection", "workflow", "checks"]),
   check: new Set(["id", "status"]),

@@ -6,6 +6,7 @@ import {
   CONCLUSIONS,
   CONTRACT_LIMITS,
   CONTRACT_REGEXP,
+  HISTORY_IDENTITY_VERSIONS,
   METRICS_GATE_STATUSES,
   PROCESS_STATUSES,
   QUALITY_HISTORY_KEYS,
@@ -97,12 +98,15 @@ function validateProcess(process, path) {
     if (!PROCESS_STATUSES.has(process[key])) fail(path + "." + key + " no es válido");
   }
   if (!Array.isArray(process.checks)) fail(path + ".checks debe ser un array");
+  const checkIds = new Set();
   process.checks.forEach((check, index) => {
     const checkPath = path + ".checks[" + index + "]";
     object(check, checkPath);
     keys(check, QUALITY_HISTORY_KEYS.check, checkPath);
     text(check.id, checkPath + ".id", CONTRACT_LIMITS.historyCheckId);
     if (!CONTRACT_REGEXP.identifier.test(check.id)) fail(checkPath + ".id no es válido");
+    if (checkIds.has(check.id)) fail(path + ".checks contiene un id duplicado: " + check.id);
+    checkIds.add(check.id);
     if (!PROCESS_STATUSES.has(check.status)) fail(checkPath + ".status no es válido");
   });
 }
@@ -112,7 +116,12 @@ function validateQuality(quality, path) {
   keys(quality, QUALITY_HISTORY_KEYS.quality, path);
   if (!QUALITY_STATUSES.has(quality.status)) fail(path + ".status no es válido");
   if (!Array.isArray(quality.gates)) fail(path + ".gates debe ser un array");
-  quality.gates.forEach((gate, index) => validateGate(gate, path + ".gates[" + index + "]"));
+  const gateIds = new Set();
+  quality.gates.forEach((gate, index) => {
+    validateGate(gate, path + ".gates[" + index + "]");
+    if (gateIds.has(gate.id)) fail(path + ".gates contiene un id duplicado: " + gate.id);
+    gateIds.add(gate.id);
+  });
   object(quality.metrics, path + ".metrics");
   const context = { count: 0, depth: 0 };
   for (const [key, value] of Object.entries(quality.metrics)) {
@@ -163,6 +172,7 @@ export function validateQualityHistory(snapshot) {
   keys(snapshot, QUALITY_HISTORY_KEYS.root, "snapshot");
   noNull(snapshot);
   if (snapshot.schemaVersion !== 1) fail("schemaVersion debe ser 1");
+  if (!HISTORY_IDENTITY_VERSIONS.has(snapshot.identityVersion ?? 1)) fail("identityVersion debe ser 1 o 2");
   sha(snapshot.id, "id", 64);
   date(snapshot.generatedAt, "generatedAt");
   sha(snapshot.dashboardCommitSha, "dashboardCommitSha");

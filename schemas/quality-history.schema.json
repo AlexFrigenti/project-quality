@@ -15,6 +15,7 @@
   ],
   "properties": {
     "schemaVersion": { "const": 1 },
+    "identityVersion": { "enum": [1, 2] },
     "id": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
     "generatedAt": {
       "type": "string",

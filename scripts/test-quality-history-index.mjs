@@ -19,6 +19,7 @@ function expectFailure(callback, message) {
 function snapshot(generatedAt, currentHeadSha) {
   const value = {
     schemaVersion: 1,
+    identityVersion: 2,
     id: "pending",
     generatedAt,
     dashboardCommitSha: "b".repeat(40),
@@ -55,6 +56,16 @@ const index = buildHistoryIndex([oldest, newest, newest]);
 assert(index.snapshots.length === 2, "La deduplicación del índice ha fallado.");
 assert(index.snapshots[0].id === newest.id, "El índice no está ordenado de más reciente a más antiguo.");
 validateQualityHistoryIndex(index);
+
+const legacyVariant = structuredClone(newest);
+delete legacyVariant.identityVersion;
+legacyVariant.generatedAt = "2026-08-11T12:00:00.000Z";
+legacyVariant.id = snapshotId(legacyVariant);
+const mixedIndex = buildHistoryIndex([legacyVariant, newest]);
+assert(mixedIndex.snapshots.length === 2, "El índice mixto debe conservar legacy y v2.");
+assert(mixedIndex.snapshots[0].id !== mixedIndex.snapshots[1].id, "Las identidades legacy y v2 deben ser distintas.");
+assert(!("identityVersion" in mixedIndex.snapshots.find((item) => item.id === legacyVariant.id)), "El snapshot legacy no debe reescribirse.");
+validateQualityHistoryIndex(mixedIndex);
 
 expectFailure(() => validateQualityHistoryIndex({
   ...index,

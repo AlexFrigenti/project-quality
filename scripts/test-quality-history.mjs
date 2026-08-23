@@ -1,7 +1,11 @@
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
 import { readFile } from "node:fs/promises";
-import { buildQualityHistorySnapshot } from "./persist-quality-history.mjs";
+import { buildHistoryIndex } from "./collect-quality-history.mjs";
+import { buildQualityHistorySnapshot, snapshotId } from "./persist-quality-history.mjs";
+import { legacyHistorySnapshot } from "./fixture-history-legacy.mjs";
 import { validateQualityHistory } from "./validate-quality-history.mjs";
+import { validateQualityHistoryIndex } from "./validate-quality-history-index.mjs";
 
 const dashboardSha = "0123456789abcdef0123456789abcdef01234567";
 const standardSha = "abcdefabcdefabcdefabcdefabcdefabcdefabcd";
@@ -172,5 +176,137 @@ assert.equal(currentCondition.then?.properties?.gates?.minItems, 1);
 const nonCurrentCondition = schema.$defs.quality.allOf.find((cond) => cond.if?.properties?.status?.enum?.includes("pending"));
 assert.ok(nonCurrentCondition);
 assert.equal(nonCurrentCondition.then?.properties?.gates?.maxItems, 0);
+
+assert.deepEqual(schema.properties.identityVersion, { enum: [1, 2] });
+assert.equal(schema.required.includes("identityVersion"), false);
+
+const mutateSnapshot = (mutate) => {
+  const snapshot = structuredClone(first);
+  mutate(snapshot);
+  snapshot.id = snapshotId(snapshot);
+  return snapshot;
+};
+
+assert.equal(first.identityVersion, 2);
+assert.equal(mutateSnapshot((s) => { s.generatedAt = "2026-08-13T23:59:00.000Z"; }).id, first.id);
+assert.equal(mutateSnapshot((s) => { s.dashboardCommitSha = "9".repeat(40); }).id, first.id);
+assert.equal(mutateSnapshot((s) => { s.repositories[0].quality.validatedAt = "2026-08-13T09:00:00.000Z"; }).id, first.id);
+assert.equal(mutateSnapshot((s) => { s.repositories[3].quality.message = "Causa transitoria distinta"; }).id, first.id);
+assert.equal(mutateSnapshot((s) => { s.repositories[0].quality.gates[0].details = "Detalle textual alternativo"; }).id, first.id);
+assert.equal(mutateSnapshot((s) => { s.repositories[0].quality.gates[0].label = "Tests unitarios"; }).id, first.id);
+
+assert.notEqual(mutateSnapshot((s) => { s.repositories[0].quality.commitSha = gestorSha.slice(1) + "2"; }).id, first.id);
+assert.notEqual(mutateSnapshot((s) => { s.repositories[0].process.overall = "warning"; }).id, first.id);
+assert.notEqual(mutateSnapshot((s) => { s.repositories[0].quality.gates[0].status = "skipped"; }).id, first.id);
+assert.notEqual(mutateSnapshot((s) => { s.repositories[0].quality.gates[0].applicability = "optional"; }).id, first.id);
+assert.notEqual(mutateSnapshot((s) => { s.repositories[0].quality.metrics.tests.passed = 9; }).id, first.id);
+
+const legacyRecipeFor = (snapshot) => ({
+  schemaVersion: snapshot.schemaVersion,
+  standard: snapshot.standard,
+  repositories: snapshot.repositories.map((repository) => ({
+    id: repository.id,
+    repository: repository.repository,
+    process: repository.process,
+    quality: repository.quality
+  }))
+});
+const legacyExpectedId = createHash("sha256").update(JSON.stringify(legacyRecipeFor(first))).digest("hex");
+const legacySnapshot = structuredClone(first);
+delete legacySnapshot.identityVersion;
+delete legacySnapshot.id;
+assert.equal(snapshotId(legacySnapshot), legacyExpectedId);
+legacySnapshot.id = legacyExpectedId;
+assert.doesNotThrow(() => validateQualityHistory(legacySnapshot));
+assert.notEqual(first.id, legacyExpectedId);
+
+assert.throws(() => snapshotId({ ...structuredClone(first), identityVersion: 3 }), /identityVersion/);
+assert.throws(() => validateQualityHistory({ ...structuredClone(first), identityVersion: 3 }), /identityVersion/);
+
+{
+  const base = structuredClone(first);
+  base.repositories[0].process.checks.push(
+    { id: "access", status: "pass" },
+    { id: "default-branch", status: "pass" }
+  );
+  base.repositories[0].quality.gates.push({
+    id: "build",
+    label: "Build",
+    applicability: "required",
+    status: "passed",
+    details: "Correcto."
+  });
+  base.repositories[0].notApplicableAreas.push("E2E", "Smoke");
+  const permutationBase = structuredClone(base);
+  permutationBase.id = snapshotId(permutationBase);
+
+  const shuffledChecks = structuredClone(base);
+  shuffledChecks.repositories[0].process.checks.reverse();
+  shuffledChecks.id = snapshotId(shuffledChecks);
+  assert.equal(shuffledChecks.id, permutationBase.id);
+
+  const shuffledGates = structuredClone(base);
+  shuffledGates.repositories[0].quality.gates.reverse();
+  shuffledGates.id = snapshotId(shuffledGates);
+  assert.equal(shuffledGates.id, permutationBase.id);
+
+  const shuffledAreas = structuredClone(base);
+  shuffledAreas.repositories[0].notApplicableAreas.reverse();
+  shuffledAreas.id = snapshotId(shuffledAreas);
+  assert.equal(shuffledAreas.id, permutationBase.id);
+
+  assert.deepEqual(base.repositories[0].notApplicableAreas, ["E2E", "Smoke"]);
+  assert.deepEqual(base.repositories[0].quality.gates.map((gate) => gate.id), ["tests", "build"]);
+
+  const addedCheck = structuredClone(base);
+  addedCheck.repositories[0].process.checks.push({ id: "extra-check", status: "unknown" });
+  addedCheck.id = snapshotId(addedCheck);
+  assert.notEqual(addedCheck.id, permutationBase.id);
+
+  const removedGate = structuredClone(base);
+  removedGate.repositories[0].quality.gates.pop();
+  removedGate.id = snapshotId(removedGate);
+  assert.notEqual(removedGate.id, permutationBase.id);
+
+  const changedCheck = structuredClone(base);
+  changedCheck.repositories[0].process.checks[0].status = "fail";
+  changedCheck.id = snapshotId(changedCheck);
+  assert.notEqual(changedCheck.id, permutationBase.id);
+}
+
+const LEGACY_SNAPSHOT_ID = "6a8b2cf6e371380a9ff611e5642d5d5290e2bb5fea455bac7296ef2ba24ea0e9";
+assert.equal(snapshotId(legacyHistorySnapshot), LEGACY_SNAPSHOT_ID);
+const legacyValidated = { ...structuredClone(legacyHistorySnapshot), id: LEGACY_SNAPSHOT_ID };
+assert.doesNotThrow(() => validateQualityHistory(legacyValidated));
+assert.equal(
+  "quality-snapshot-" + LEGACY_SNAPSHOT_ID + ".json",
+  "quality-snapshot-" + snapshotId(structuredClone(legacyHistorySnapshot)) + ".json"
+);
+
+{
+  const legacyInIndex = structuredClone(legacyValidated);
+  const mixedIndex = buildHistoryIndex([legacyInIndex, structuredClone(first)]);
+  assert.equal(mixedIndex.snapshots.length, 2);
+  assert.ok(mixedIndex.snapshots.some((item) => item.id === LEGACY_SNAPSHOT_ID));
+  assert.doesNotThrow(() => validateQualityHistoryIndex(mixedIndex));
+}
+
+{
+  const duplicatedCheck = structuredClone(first);
+  duplicatedCheck.repositories[0].process.checks.push({ id: "main-protection", status: "warning" });
+  assert.throws(() => validateQualityHistory(duplicatedCheck), /checks contiene un id duplicado: main-protection/);
+}
+
+{
+  const duplicatedGate = structuredClone(first);
+  duplicatedGate.repositories[0].quality.gates.push({
+    id: "tests",
+    label: "Tests repetido",
+    applicability: "optional",
+    status: "passed",
+    details: "Gate repetido."
+  });
+  assert.throws(() => validateQualityHistory(duplicatedGate), /gates contiene un id duplicado: tests/);
+}
 
 console.log("Histórico de calidad válido.");

@@ -2,6 +2,10 @@ import { createHash } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import { pathToFileURL } from "node:url";
 import { resolve } from "node:path";
+import {
+  HISTORY_CURRENT_IDENTITY_VERSION,
+  HISTORY_IDENTITY_VERSIONS
+} from "./quality-contract.mjs";
 import { validateQualityHistory } from "./validate-quality-history.mjs";
 
 const API_ROOT = "https://api.github.com";
@@ -137,7 +141,7 @@ function normalizeRepository(report) {
   };
 }
 
-function identityFor(snapshot) {
+function legacyIdentityFor(snapshot) {
   return {
     schemaVersion: snapshot.schemaVersion,
     standard: snapshot.standard,
@@ -150,8 +154,85 @@ function identityFor(snapshot) {
   };
 }
 
+function compareById(left, right) {
+  return left.id < right.id ? -1 : left.id > right.id ? 1 : 0;
+}
+
+function semanticQualityIdentity(quality) {
+  const identity = {
+    status: quality.status,
+    gates: [...quality.gates]
+      .sort(compareById)
+      .map((gate) => ({
+        id: gate.id,
+        applicability: gate.applicability,
+        status: gate.status
+      })),
+    metrics: quality.metrics
+  };
+  if (quality.commitSha !== undefined) identity.commitSha = quality.commitSha;
+  if (quality.currentHeadSha !== undefined) identity.currentHeadSha = quality.currentHeadSha;
+  if (quality.conclusion !== undefined) identity.conclusion = quality.conclusion;
+  return identity;
+}
+
+function semanticRepositoryIdentity(repository) {
+  return {
+    id: repository.id,
+    repository: repository.repository,
+    kind: repository.kind,
+    notApplicableAreas: [...repository.notApplicableAreas].sort(),
+    process: {
+      overall: repository.process.overall,
+      mainProtection: repository.process.mainProtection,
+      workflow: repository.process.workflow,
+      checks: [...repository.process.checks]
+        .sort(compareById)
+        .map((check) => ({
+          id: check.id,
+          status: check.status
+        }))
+    },
+    quality: semanticQualityIdentity(repository.quality)
+  };
+}
+
+function semanticIdentityFor(snapshot) {
+  return {
+    schemaVersion: snapshot.schemaVersion,
+    identityVersion: snapshot.identityVersion,
+    standard: {
+      release: snapshot.standard.release,
+      sha: snapshot.standard.sha
+    },
+    repositories: [...snapshot.repositories]
+      .sort(compareById)
+      .map(semanticRepositoryIdentity)
+  };
+}
+
+function canonicalJson(value) {
+  if (Array.isArray(value)) return "[" + value.map(canonicalJson).join(",") + "]";
+  if (value !== null && typeof value === "object") {
+    return "{" + Object.keys(value)
+      .sort()
+      .map((key) => JSON.stringify(key) + ":" + canonicalJson(value[key]))
+      .join(",") + "}";
+  }
+  return JSON.stringify(value);
+}
+
 export function snapshotId(snapshot) {
-  return createHash("sha256").update(JSON.stringify(identityFor(snapshot))).digest("hex");
+  const identityVersion = snapshot.identityVersion ?? 1;
+  if (!HISTORY_IDENTITY_VERSIONS.has(identityVersion)) {
+    throw new Error("identityVersion no soportada: " + identityVersion);
+  }
+  const identity = identityVersion === 2
+    ? semanticIdentityFor(snapshot)
+    : legacyIdentityFor(snapshot);
+  return createHash("sha256")
+    .update(identityVersion === 2 ? canonicalJson(identity) : JSON.stringify(identity))
+    .digest("hex");
 }
 
 export function buildQualityHistorySnapshot(data, { now = new Date(), dashboardCommitSha = process.env.GITHUB_SHA } = {}) {
@@ -168,6 +249,7 @@ export function buildQualityHistorySnapshot(data, { now = new Date(), dashboardC
 
   const snapshot = {
     schemaVersion: 1,
+    identityVersion: HISTORY_CURRENT_IDENTITY_VERSION,
     id: "pending",
     generatedAt: now.toISOString(),
     dashboardCommitSha: currentDashboardSha,
