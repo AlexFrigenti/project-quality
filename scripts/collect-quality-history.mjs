@@ -6,7 +6,7 @@ import { validateQualityHistory } from "./validate-quality-history.mjs";
 import { validateQualityHistoryIndex } from "./validate-quality-history-index.mjs";
 import { createQuarantineEntry, createQuarantineManifest } from "./history-quarantine.mjs";
 import { listHistoryReleases, listReleaseAssets } from "./history-pagination.mjs";
-import { CONTRACT_REGEXP, TOKEN_PATTERN } from "./quality-contract.mjs";
+import { CONTRACT_REGEXP, canonicalJson } from "./quality-contract.mjs";
 
 const API_ROOT = "https://api.github.com";
 
@@ -49,7 +49,8 @@ export function buildHistoryIndex(snapshots, { now = new Date() } = {}) {
   const byId = new Map();
   for (const snapshot of snapshots) {
     validateQualityHistory(snapshot);
-    byId.set(snapshot.id, snapshot);
+    const existing = byId.get(snapshot.id);
+    byId.set(snapshot.id, existing ? pickRepresentative(existing, snapshot) : snapshot);
   }
 
   const ordered = [...byId.values()].sort((left, right) => {
@@ -62,6 +63,13 @@ export function buildHistoryIndex(snapshots, { now = new Date() } = {}) {
   };
   validateQualityHistoryIndex(index);
   return index;
+}
+
+function pickRepresentative(left, right) {
+  const leftTime = Date.parse(left.generatedAt);
+  const rightTime = Date.parse(right.generatedAt);
+  if (leftTime !== rightTime) return leftTime > rightTime ? left : right;
+  return canonicalJson(left) <= canonicalJson(right) ? left : right;
 }
 
 async function evaluateSnapshotAsset({ repository, release, asset, expectedId, fetchAssetBody }) {
