@@ -291,4 +291,22 @@ assert.equal(
   assert.doesNotThrow(() => validateQualityHistoryIndex(mixedIndex));
 }
 
+{
+  const duplicatedCheck = structuredClone(first);
+  duplicatedCheck.repositories[0].process.checks.push({ id: "main-protection", status: "warning" });
+  assert.throws(() => validateQualityHistory(duplicatedCheck), /checks contiene un id duplicado: main-protection/);
+}
+
+{
+  const duplicatedGate = structuredClone(first);
+  duplicatedGate.repositories[0].quality.gates.push({
+    id: "tests",
+    label: "Tests repetido",
+    applicability: "optional",
+    status: "passed",
+    details: "Gate repetido."
+  });
+  assert.throws(() => validateQualityHistory(duplicatedGate), /gates contiene un id duplicado: tests/);
+}
+
 console.log("Histórico de calidad válido.");
