@@ -333,7 +333,7 @@ function createPersistDeps({ releasePages, assetsByReleaseId, existingMonthlyRel
       return {
         ok: true,
         status: 201,
-        data: { id: 900, tag_name: "quality-history-" + periodTag(options.body), upload_url: "https://upload.invalid/repos/o/r/releases/900/assets{?name,label}" }
+        data: { id: 900, tag_name: "quality-history-" + periodTag(options.body), upload_url: "" }
       };
     }
     return { ok: false, status: 404, data: null };

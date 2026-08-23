@@ -36,6 +36,32 @@ La identidad v2 excluye deliberadamente los campos transitorios o de presentaci�
 
 Cualquier valor de `identityVersion` distinto de 1 o 2 se rechaza en la validación del snapshot y del índice.
 
+## Colección con cuarentena fail-closed
+
+La colección recorre todas las páginas de releases y assets (filtrando los releases `quality-history-YYYY-MM`) hasta encontrar una página vacía o incompleta. Superar un límite interno de seguridad de paginación produce un fallo explícito: nunca se trunca silenciosamente.
+
+Los assets del namespace `quality-snapshot-*` se descargan y validan individualmente. Un problema verificable genera una entrada estructurada de cuarentena con causa tipada:
+
+- `invalid-name`: el nombre no coincide con `quality-snapshot-<sha256>.json`;
+- `download-failed`: la descarga no pudo completarse;
+- `invalid-json`: el contenido no es JSON válido;
+- `invalid-snapshot`: el contenido viola el contrato de snapshot;
+- `asset-id-mismatch`: el `id` del contenido no coincide con el hash del nombre.
+
+Los assets ajenos al namespace histórico no son snapshots: se ignoran deliberadamente, sin semántica de snapshot y sin borrado. Las entradas de cuarentena se registran en un manifest cerrado (`schemas/quality-history-quarantine.schema.json`) con detalles acotados y sanitizados, sin URLs, tokens, headers ni cuerpos de respuesta; los assets afectados permanecen intactos en su release (cuarentena lógica, no destructiva).
+
+Si existe al menos una entrada, el comportamiento es fail-closed: se escribe `site/history-quarantine.json` como artifact de diagnóstico del workflow, la colección termina con error, y no se genera ni publica ningún `history.json` parcial. La corrección de un asset corrupto exige decisión humana fuera del pipeline.
+
+## Deduplicación determinista
+
+El índice colapsa snapshots con el mismo `id` en un único representante elegido de forma independiente del orden de llegada: gana el `generatedAt` mayor y, en empate, el JSON canónico (claves ordenadas) menor lexicográficamente. Esto hace irrelevante el orden de descarga entre releases y meses, tanto para snapshots legacy v1 como semantic v2, sin mutar las entradas recibidas.
+
+La persistencia comprueba antes de crear cualquier release si `quality-snapshot-<id>.json` ya existe en cualquiera de los releases históricos. Si existe, no se crea release nuevo ni se sube duplicado, y se informa del release que ya lo contiene. Un asset remoto corrupto nunca se reemplaza: quedará en cuarentena durante la colección. No se utiliza ningún método DELETE.
+
+## Retención
+
+No existe pruning automático. Los releases mensuales y sus assets se conservan de forma indefinida hasta que exista una decisión explícita de retención que defina política, alcance, procedimiento de reversión y compatibilidad histórica.
+
 ## Índice y vista del dashboard
 
 Antes de desplegar Pages, el workflow lee los releases históricos, descarga sus assets mediante el token efímero de Actions, valida cada snapshot y genera `history.json`. El índice se incorpora al mismo artefacto estático que `data.json` y no contiene URLs, credenciales ni datos de autenticación.
