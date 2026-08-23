@@ -89,10 +89,10 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Set up Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v7
         with:
           node-version: ${{ inputs.node-version }}
           cache: npm
@@ -127,7 +127,7 @@ jobs:
 
       - name: Upload unit test diagnostics
         if: ${{ always() && inputs.test-results-file != '' }}
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: unit-test-diagnostics
           path: ${{ inputs.test-results-file }}
@@ -160,7 +160,7 @@ jobs:
 
       - name: Checkout quality standard support
         if: ${{ always() }}
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           repository: AlexFrigenti/project-quality
           ref: ${{ inputs.standard-sha }}
@@ -215,7 +215,7 @@ jobs:
 
       - name: Upload quality metrics
         if: ${{ always() }}
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: quality-metrics
           path: quality-metrics.json
