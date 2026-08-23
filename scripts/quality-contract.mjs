@@ -5,7 +5,9 @@ export const CONTRACT_PATTERNS = Object.freeze({
   sha40: "^[0-9a-f]{40}$",
   sha64: "^[0-9a-f]{64}$",
   rfc3339DateTime: "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(?:\\.\\d+)?(?:Z|[+-]\\d{2}:\\d{2})$",
-  httpUrl: "^https?://"
+  httpUrl: "^https?://",
+  historyReleaseTag: "^quality-history-\\d{4}-\\d{2}$",
+  historyAssetName: "^quality-snapshot-[0-9a-f]{64}\\.json$"
 });
 
 export const CONTRACT_REGEXP = Object.freeze({
@@ -14,7 +16,9 @@ export const CONTRACT_REGEXP = Object.freeze({
   repository: new RegExp(CONTRACT_PATTERNS.repository),
   sha40: new RegExp(CONTRACT_PATTERNS.sha40),
   sha64: new RegExp(CONTRACT_PATTERNS.sha64),
-  rfc3339DateTime: new RegExp(CONTRACT_PATTERNS.rfc3339DateTime)
+  rfc3339DateTime: new RegExp(CONTRACT_PATTERNS.rfc3339DateTime),
+  historyReleaseTag: new RegExp(CONTRACT_PATTERNS.historyReleaseTag),
+  historyAssetName: new RegExp(CONTRACT_PATTERNS.historyAssetName)
 });
 
 export const TOKEN_PATTERN = /(gh[pousr]_[A-Za-z0-9_]+|github_pat_[A-Za-z0-9_]+|Bearer\s+[A-Za-z0-9._-]+)/i;
@@ -44,6 +48,7 @@ export const QUALITY_STATUSES = new Set(["current", "pending", "unavailable"]);
 
 export const HISTORY_IDENTITY_VERSIONS = Object.freeze(new Set([1, 2]));
 export const HISTORY_CURRENT_IDENTITY_VERSION = 2;
+export const QUARANTINE_DETAIL_LIMIT = 200;
 
 export const QUALITY_METRICS_KEYS = Object.freeze({
   root: new Set(["schemaVersion", "project", "commit", "run", "standard", "conclusion", "gates", "metrics", "evidence"]),
