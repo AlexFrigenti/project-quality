@@ -10,6 +10,7 @@ on:
       - "scripts/audit-repository.mjs"
       - "scripts/main-protection.mjs"
       - "scripts/test-audit-profiles.mjs"
+      - "scripts/test-actions-runtime.mjs"
       - "scripts/test-main-protection.mjs"
       - "scripts/test-history-rendering.mjs"
       - "scripts/test-dashboard.mjs"
@@ -49,6 +50,7 @@ on:
       - "scripts/audit-repository.mjs"
       - "scripts/main-protection.mjs"
       - "scripts/test-audit-profiles.mjs"
+      - "scripts/test-actions-runtime.mjs"
       - "scripts/test-main-protection.mjs"
       - "scripts/test-history-rendering.mjs"
       - "scripts/test-dashboard.mjs"
@@ -116,7 +118,7 @@ jobs:
             visibility: public
     steps:
       - name: Checkout dashboard source
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Audit repository
         env:
@@ -131,7 +133,7 @@ jobs:
 
       - name: Upload audit report
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: audit-${{ matrix.id }}
           path: report-${{ matrix.id }}.json
@@ -144,7 +146,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout dashboard source
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Validate quality metrics contract
         run: node scripts/test-quality-metrics.mjs
@@ -180,7 +182,7 @@ jobs:
         run: node scripts/test-quality-history-index.mjs
 
       - name: Download audit reports
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           pattern: audit-*
           path: audit-reports
@@ -204,7 +206,7 @@ jobs:
 
       - name: Upload history quarantine manifest
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: history-quarantine-manifest
           path: site/history-quarantine.json
@@ -217,7 +219,7 @@ jobs:
         run: node scripts/validate-dashboard.mjs site/data.json
 
       - name: Upload dashboard preview
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: quality-dashboard-preview
           path: site
@@ -225,7 +227,7 @@ jobs:
 
       - name: Upload Pages source artifact
         if: github.event_name != 'pull_request'
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: quality-dashboard-site
           path: site
@@ -241,10 +243,10 @@ jobs:
       actions: read
     steps:
       - name: Checkout dashboard source
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Download Pages source
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: quality-dashboard-site
           path: site
@@ -270,19 +272,19 @@ jobs:
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
       - name: Download Pages source
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: quality-dashboard-site
           path: site
 
       - name: Configure Pages
-        uses: actions/configure-pages@v5
+        uses: actions/configure-pages@v6
 
       - name: Upload Pages artifact
-        uses: actions/upload-pages-artifact@v3
+        uses: actions/upload-pages-artifact@v5
         with:
           path: site
 
       - name: Deploy to Pages
         id: deployment
-        uses: actions/deploy-pages@v4
+        uses: actions/deploy-pages@v5

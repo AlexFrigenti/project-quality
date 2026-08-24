@@ -19,7 +19,7 @@ assert.ok(coverageStep > diagnosticsStep, "el diagnóstico debe preservarse ante
 
 const diagnosticsBlock = workflow.slice(diagnosticsStep, coverageStep);
 assert.match(diagnosticsBlock, /if: \$\{\{ always\(\) && inputs\.test-results-file != '' \}\}/);
-assert.match(diagnosticsBlock, /uses: actions\/upload-artifact@v4/);
+assert.match(diagnosticsBlock, /uses: actions\/upload-artifact@v7/);
 assert.match(diagnosticsBlock, /name: unit-test-diagnostics/);
 assert.match(diagnosticsBlock, /path: \$\{\{ inputs\.test-results-file \}\}/);
 assert.match(diagnosticsBlock, /if-no-files-found: warn/);
