@@ -438,8 +438,30 @@ function rejectTokens(value) {
   if (TOKEN_PATTERN.test(serialized)) throw new Error("El dashboard contiene un patrón que parece un token");
 }
 
-export function buildDashboardSummary(repositories) {
-  const count = (predicate) => repositories.filter(predicate).length;
+export const FRESHNESS_MAX_AGE_HOURS = 192;
+
+export function computeFreshness(generatedAt, now = new Date(), maxAgeHours = FRESHNESS_MAX_AGE_HOURS) {
+  if (!Number.isInteger(maxAgeHours) || maxAgeHours <= 0) return "unknown";
+  if (typeof generatedAt !== "string" || generatedAt.trim() === "") return "unknown";
+  const generatedMs = Date.parse(generatedAt);
+  if (Number.isNaN(generatedMs)) return "unknown";
+  if (!(now instanceof Date) || Number.isNaN(now.getTime())) return "unknown";
+  const ageMs = now.getTime() - generatedMs;
+  if (ageMs < 0) return "unknown";
+  return ageMs <= maxAgeHours * 3600000 ? "fresh" : "stale";
+}
+
+function validateFreshness(value) {
+  object(value, "freshness");
+  const keys = Object.keys(value);
+  assert(keys.length === 1 && keys[0] === "maxAgeHours", "freshness solo puede contener maxAgeHours");
+  assert(
+    Number.isInteger(value.maxAgeHours) && value.maxAgeHours > 0,
+    "freshness.maxAgeHours debe ser un entero positivo (horas)"
+  );
+}
+
+export function buildDashboardSummary(repositories) {  const count = (predicate) => repositories.filter(predicate).length;
   return {
     total: repositories.length,
     pass: count((report) => report.overall === "pass"),
@@ -458,6 +480,8 @@ export function validateDashboard(value) {
   object(value, "dashboard");
   assert(value.schemaVersion === 1, "schemaVersion debe ser 1");
   date(value.generatedAt, "generatedAt");
+  assert(Object.prototype.hasOwnProperty.call(value, "freshness"), "freshness es obligatorio en el dashboard");
+  validateFreshness(value.freshness);
   object(value.source, "source");
   text(value.source.repository, "source.repository", 240);
   assert(/^[^/]+\/[^/]+$/.test(value.source.repository), "source.repository no es válido");

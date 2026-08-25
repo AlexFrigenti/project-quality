@@ -5,7 +5,7 @@ import { tmpdir } from "node:os";
 import { constants } from "node:fs";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
-import { buildDashboardSummary, validateDashboard } from "./dashboard-contract.mjs";
+import { buildDashboardSummary, computeFreshness, FRESHNESS_MAX_AGE_HOURS, validateDashboard } from "./dashboard-contract.mjs";
 import { validateDashboard as validateDashboardCliExport } from "./validate-dashboard.mjs";
 import { assembleDashboard } from "./assemble-dashboard.mjs";
 
@@ -159,6 +159,7 @@ function buildValidDashboard() {
   return {
     schemaVersion: 1,
     generatedAt: "2026-08-18T16:00:00.000Z",
+    freshness: { maxAgeHours: 192 },
     source: {
       repository: "AlexFrigenti/project-quality",
       commit: sampleSha,
@@ -189,6 +190,51 @@ function buildValidDashboard() {
 {
   const valid = buildValidDashboard();
   assert.equal(validateDashboard(valid), true, "Un dashboard válido debe retornar true");
+}
+
+// 1.1.a Frescura: el bloque freshness es obligatorio
+{
+  const noFreshness = buildValidDashboard();
+  delete noFreshness.freshness;
+  assert.throws(() => validateDashboard(noFreshness), /freshness/, "freshness debe ser obligatorio");
+}
+
+// 1.1.b maxAgeHours inválido: ausente, cero, negativo, decimal, no numérico, null
+for (const [label, mutate] of [
+  ["ausente", (f) => ({ maxAgeHours: undefined })],
+  ["cero", (f) => ({ maxAgeHours: 0 })],
+  ["negativo", (f) => ({ maxAgeHours: -24 })],
+  ["decimal", (f) => ({ maxAgeHours: 192.5 })],
+  ["no numérico", (f) => ({ maxAgeHours: "192" })],
+  ["null", (f) => ({ maxAgeHours: null })]
+]) {
+  const broken = buildValidDashboard();
+  broken.freshness = { ...mutate() };
+  assert.throws(() => validateDashboard(broken), /maxAgeHours/, `maxAgeHours ${label} debe rechazarse`);
+}
+
+// 1.1.c Exactamente 192 se acepta
+{
+  const exact = buildValidDashboard();
+  assert.doesNotThrow(() => validateDashboard(exact), "maxAgeHours 192 debe aceptarse");
+}
+
+// 1.1.d computeFreshness: límites y rutas
+{
+  const now = new Date("2026-08-20T12:00:00.000Z");
+  const hoursAgo = (h, ms = 0) => new Date(now.getTime() - h * 3600000 - ms).toISOString();
+  assert.equal(computeFreshness(hoursAgo(0), now, 192), "fresh", "edad 0 es fresh");
+  assert.equal(computeFreshness(hoursAgo(192), now, 192), "fresh", "exactamente 192 horas es fresh");
+  assert.equal(computeFreshness(hoursAgo(192, 1), now, 192), "stale", "192 horas + 1 ms es stale");
+  assert.equal(computeFreshness(hoursAgo(300), now, 192), "stale", "mucho más viejo es stale");
+  assert.equal(computeFreshness(new Date(now.getTime() + 3600000).toISOString(), now, 192), "unknown", "fecha futura es unknown");
+  assert.equal(computeFreshness("no-es-una-fecha", now, 192), "unknown", "fecha inválida es unknown");
+  assert.equal(computeFreshness(undefined, now, 192), "unknown", "fecha ausente es unknown");
+  assert.equal(computeFreshness(hoursAgo(1), now, 0), "unknown", "política cero es unknown");
+  assert.equal(computeFreshness(hoursAgo(1), now, -5), "unknown", "política negativa es unknown");
+  assert.equal(computeFreshness(hoursAgo(1), now, 1.5), "unknown", "política decimal es unknown");
+  assert.equal(computeFreshness(hoursAgo(1), now, "192"), "unknown", "política no numérica es unknown");
+  assert.equal(FRESHNESS_MAX_AGE_HOURS, 192, "La política del ensamblador es 192 horas");
 }
 
 // 1.2. Falta de repositorio esperado (solo 3 repos)
@@ -425,6 +471,7 @@ try {
     });
 
     assert.equal(data.schemaVersion, 1);
+    assert.deepEqual(data.freshness, { maxAgeHours: 192 }, "El ensamblador debe emitir la política de frescura de 192 horas");
     assert.equal(data.repositories.length, 4);
     assert.deepEqual(
       data.repositories.map((r) => r.repository.id),
@@ -578,6 +625,53 @@ try {
   }
 } finally {
   await rm(cliTempDir, { recursive: true, force: true });
+}
+
+// -------------------------------------------------------------
+// Frescura visible en la interfaz (contrato estático del HTML)
+// -------------------------------------------------------------
+{
+  const html = await readFile("dashboard/index.html", "utf8");
+  assert.ok(html.includes("data.freshness"), "La interfaz debe leer data.freshness");
+  assert.ok(html.includes("maxAgeHours"), "La interfaz debe usar la política maxAgeHours publicada");
+  assert.ok(html.includes("freshnessStatus"), "La interfaz debe calcular el estado con freshnessStatus()");
+  for (const label of ["Fresca", "Antigua", "No verificable"]) {
+    assert.ok(html.includes(label), `La interfaz debe mostrar la ruta de estado "${label}"`);
+  }
+  assert.match(
+    html,
+    /stale[\s\S]{0,200}badge\.warning|freshness-stale/,
+    "stale debe mostrarse como advertencia (amber), nunca verde"
+  );
+  assert.match(
+    html,
+    /unknown[\s\S]{0,200}(badge\.warning|badge\.unknown)|freshness-unknown/,
+    "unknown debe mostrarse como advertencia o no-verde"
+  );
+}
+
+// -------------------------------------------------------------
+// La frescura no altera el snapshotId ni reescribe el histórico
+// -------------------------------------------------------------
+{
+  const { buildQualityHistorySnapshot } = await import("./persist-quality-history.mjs");
+  const dashboardSha = "0123456789abcdef0123456789abcdef01234567";
+  const withFreshness = structuredClone(buildValidDashboard());
+  const withoutFreshness = structuredClone(withFreshness);
+  delete withoutFreshness.freshness;
+  withFreshness.generatedAt = "2026-08-18T16:00:00.000Z";
+  withoutFreshness.generatedAt = "2026-08-18T16:00:00.000Z";
+  const snapA = buildQualityHistorySnapshot(withFreshness, {
+    now: new Date("2026-08-18T17:00:00.000Z"),
+    dashboardCommitSha: dashboardSha
+  });
+  const snapB = buildQualityHistorySnapshot(withoutFreshness, {
+    now: new Date("2026-08-19T17:00:00.000Z"),
+    dashboardCommitSha: dashboardSha
+  });
+  assert.ok(snapA && snapB);
+  assert.equal(snapA.id, snapB.id, "freshness/generatedAt no participan en snapshotId");
+  assert.notEqual(snapA.generatedAt, snapB.generatedAt);
 }
 
 console.log("Pruebas de validación y ensamblado del dashboard válidas.");

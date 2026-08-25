@@ -36,6 +36,16 @@ Los informes privados no contienen URLs ni referencias de evidencia públicas. L
 
 Si todavía no existe evidencia para ese commit, el panel muestra `Evidencia pendiente para el commit actual`. Eso no se interpreta automáticamente como un fallo de calidad. Cuando la ejecución completada más reciente del commit —que es la autoritativa— tiene una evidencia que no puede utilizarse (artifact ilegible, informe que contradice la conclusión real del workflow o de otro intento), el panel lo distingue como evidencia no utilizable e indica la causa, sin sobrestimar la calidad ni retroceder a ejecuciones anteriores.
 
+## Frescura temporal de la evidencia
+
+`data.json` publica la política de frescura mediante `freshness.maxAgeHours: 192`: una semana de cadencia más 24 horas de margen. El estado no se calcula durante el build —quedaría congelado— sino en el navegador al abrir Pages, comparando `generatedAt` con la hora actual:
+
+- `Fresca`: fecha válida, no futura y edad ≤ 192 horas;
+- `Antigua`: fecha válida y edad > 192 horas; se muestra como advertencia ámbar;
+- `No verificable`: fecha ausente, inválida o futura, o política inválida; también advertencia, nunca verde.
+
+La frescura es independiente del `summary`, los repositorios, los gates y las conclusiones de calidad: no añade contadores ni puntuaciones y solo describe la edad de la evidencia publicada. No participa en el `snapshotId` ni provoca reescrituras del histórico.
+
 ## Acceso al repositorio privado
 
 `gestor-autonomo` y `Nexo` son privados. Para auditarlos completamente hay que configurar en `project-quality` un secreto de Actions con un token fine-grained de solo lectura y alcance limitado a los repositorios necesarios. Sin esas credenciales, el dashboard muestra esos repositorios como `Revisar` y no expone enlaces ni contenido privado.
