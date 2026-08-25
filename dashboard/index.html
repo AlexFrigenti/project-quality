@@ -78,6 +78,8 @@
 .freshness-fresh { color: var(--green); }
 .freshness-stale, .freshness-unknown { color: var(--amber); }
 .freshness[hidden] { display: none; }
+.freshness-note { margin-top: 8px; max-width: 560px; font-size: 11px; line-height: 1.5; color: var(--muted, #9aa4b2); }
+.freshness-note[hidden] { display: none; }
       .project-description { min-height: 48px; margin-bottom: 19px; color: var(--muted); font-size: 13px; }
       .facts { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-bottom: 20px; }
       .fact { padding: 11px 12px; border: 1px solid var(--line); border-radius: 11px; background: rgba(7, 17, 31, .45); }
@@ -154,6 +156,7 @@
         </div>
         <div class="run-meta" id="run-meta">Cargando auditoría…</div>
         <div class="freshness" id="freshness" hidden></div>
+        <p class="freshness-note" id="freshness-note" hidden>Este estado describe cuándo se publicó el dashboard. No detecta cambios posteriores en los repositorios externos hasta la siguiente auditoría.</p>
       </header>
 
       <section class="summary" id="summary" aria-label="Resumen de calidad"></section>
@@ -249,9 +252,9 @@
           return { status: "unknown", label: "No verificable", detail: "La fecha de generación está en el futuro." };
         }
         if (ageHours <= policy) {
-          return { status: "fresh", label: "Fresca", detail: "Evidencia generada hace " + ageHours.toFixed(1) + " h (límite " + policy + " h)." };
+          return { status: "fresh", label: "Fresca", detail: "Publicación generada hace " + ageHours.toFixed(1) + " h (límite " + policy + " h)." };
         }
-        return { status: "stale", label: "Antigua", detail: "Evidencia generada hace " + Math.round(ageHours) + " h; supera el límite de " + policy + " h. Ejecuta el workflow semanal." };
+        return { status: "stale", label: "Antigua", detail: "Publicación generada hace " + Math.round(ageHours) + " h; supera el límite de " + policy + " h. Ejecuta el workflow semanal." };
       }
 
       function renderFreshness(data) {
@@ -259,8 +262,10 @@
         const element = document.getElementById("freshness");
         element.className = "freshness freshness-" + freshness.status;
         element.hidden = false;
-        element.textContent = "Frescura: " + freshness.label + " · " + freshness.detail;
+        element.textContent = "Antigüedad de la publicación: " + freshness.label + " · " + freshness.detail;
         element.title = "Generada: " + formatDate(data.generatedAt);
+        const note = document.getElementById("freshness-note");
+        note.hidden = false;
       }
 
   function renderSummary(summary) {
