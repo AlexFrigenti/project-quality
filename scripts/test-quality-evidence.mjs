@@ -1,4 +1,7 @@
 import assert from "node:assert/strict";
+import { execFile } from "node:child_process";
+import { readdir } from "node:fs/promises";
+import zlib from "node:zlib";
 import {
   buildQualitySummary,
   collectQualityEvidence,
@@ -6,6 +9,7 @@ import {
   readArtifactJson,
   sanitizeQualityMetrics
 } from "./collect-quality-evidence.mjs";
+import { findZipEntry } from "./zip-entry-reader.mjs";
 
 const sample = {
   schemaVersion: 1,
@@ -380,6 +384,175 @@ await assert.rejects(
   ),
   /supera el límite/
 );
+
+// -------------------------------------------------------------
+// Lectura portable de ZIP (sin ejecutable unzip externo)
+// -------------------------------------------------------------
+function crc32Placeholder() {
+  return 0;
+}
+
+function buildTestZip(entries) {
+  const locals = [];
+  const centrals = [];
+  let offset = 0;
+  for (const entry of entries) {
+    const nameBuf = Buffer.from(entry.name, "utf8");
+    const method = entry.method ?? 0;
+    const flags = entry.flags ?? 0;
+    const raw = Buffer.isBuffer(entry.data) ? entry.data : Buffer.from(entry.data, "utf8");
+    const compressed = method === 8 ? zlib.deflateRawSync(raw) : raw;
+    const declaredSize = entry.declaredUncompressed ?? raw.length;
+
+    const local = Buffer.alloc(30);
+    local.writeUInt32LE(0x04034b50, 0);
+    local.writeUInt16LE(20, 4);
+    local.writeUInt16LE(flags, 6);
+    local.writeUInt16LE(method, 8);
+    local.writeUInt32LE(crc32Placeholder(), 14);
+    local.writeUInt32LE(compressed.length, 18);
+    local.writeUInt32LE(declaredSize, 22);
+    local.writeUInt16LE(nameBuf.length, 26);
+    locals.push(local, nameBuf, compressed);
+
+    const central = Buffer.alloc(46);
+    central.writeUInt32LE(0x02014b50, 0);
+    central.writeUInt16LE(20, 6);
+    central.writeUInt16LE(flags, 8);
+    central.writeUInt16LE(method, 10);
+    central.writeUInt32LE(crc32Placeholder(), 16);
+    central.writeUInt32LE(compressed.length, 20);
+    central.writeUInt32LE(declaredSize, 24);
+    central.writeUInt16LE(nameBuf.length, 28);
+    central.writeUInt32LE(offset, 42);
+    centrals.push(central, nameBuf);
+
+    offset += 30 + nameBuf.length + compressed.length;
+  }
+  const centralDirectory = Buffer.concat(centrals);
+  const eocd = Buffer.alloc(22);
+  eocd.writeUInt32LE(0x06054b50, 0);
+  eocd.writeUInt16LE(entries.length, 8);
+  eocd.writeUInt16LE(entries.length, 10);
+  eocd.writeUInt32LE(centralDirectory.length, 12);
+  eocd.writeUInt32LE(offset, 16);
+  return Buffer.concat([...locals, centralDirectory, eocd]);
+}
+
+function patchFirstCentralOffset(buffer, newValue) {
+  const patched = Buffer.from(buffer);
+  const position = patched.indexOf(Buffer.from([0x50, 0x4b, 0x01, 0x02]));
+  if (position === -1) throw new Error("fixture sin directorio central");
+  patched.writeUInt32LE(newValue, position + 42);
+  return patched;
+}
+
+const jsonPayload = JSON.stringify({ schemaVersion: 1, hello: "world" });
+
+{
+  const zip = buildTestZip([{ name: "quality-metrics.json", data: jsonPayload }]);
+  const entry = findZipEntry(zip, (name) => name === "quality-metrics.json");
+  assert.equal(entry.name, "quality-metrics.json");
+  assert.equal(JSON.parse(entry.data.toString("utf8")).hello, "world");
+}
+
+{
+  const zip = buildTestZip([{ name: "folder/nested/quality-metrics.json", data: jsonPayload, method: 8 }]);
+  const entry = findZipEntry(zip, (name) => name.endsWith("/quality-metrics.json"));
+  assert.equal(JSON.parse(entry.data.toString("utf8")).hello, "world");
+}
+
+{
+  const zip = buildTestZip([
+    { name: "quality-metrics.json", data: jsonPayload },
+    { name: "otro.txt", data: "contenido" }
+  ]);
+  const matchesCollectorCriteria = (name) => name === "quality-metrics.json" || name.endsWith("/quality-metrics.json");
+  assert.equal(findZipEntry(zip, matchesCollectorCriteria).name, "quality-metrics.json");
+}
+
+{
+  const matchesCollectorCriteria = (name) => name === "quality-metrics.json" || name.endsWith("/quality-metrics.json");
+  assert.equal(
+    findZipEntry(buildTestZip([{ name: "solo-otro.txt", data: "x" }]), matchesCollectorCriteria),
+    null,
+    "entrada ausente debe devolver null en el parser"
+  );
+  await assert.rejects(
+    readArtifactJson(
+      { archive_download_url: "https://pipeline.invalid/zip" },
+      REPOSITORY,
+      { fetch: async () => ({ ok: true, status: 200, arrayBuffer: async () => buildTestZip([{ name: "solo-otro.txt", data: "x" }]) }) }
+    ),
+    /no contiene quality-metrics\.json/,
+    "readArtifactJson debe rechazar un artifact sin la entrada esperada"
+  );
+}
+
+assert.throws(
+  () => findZipEntry(Buffer.from("esto no es un zip", "utf8"), () => true),
+  /malformado|EOCD/,
+  "ZIP corrupto debe rechazarse"
+);
+
+assert.throws(
+  () => findZipEntry(buildTestZip([{ name: "secreto.json", data: "x", method: 99 }]), () => true),
+  /método de compresión no soportado/,
+  "método no soportado debe rechazarse"
+);
+
+assert.throws(
+  () => findZipEntry(buildTestZip([{ name: "secreto.json", data: "x", flags: 1 }]), () => true),
+  /cifrada/,
+  "entrada cifrada debe rechazarse"
+);
+
+assert.throws(
+  () => findZipEntry(buildTestZip([{ name: "grande.json", data: "x", declaredUncompressed: 1000001 }]), () => true),
+  /1\.000\.000/,
+  "entrada descomprimida sobre el límite debe rechazarse"
+);
+
+{
+  const valid = buildTestZip([{ name: "quality-metrics.json", data: jsonPayload }]);
+  const broken = patchFirstCentralOffset(valid, valid.length + 500);
+  assert.throws(() => findZipEntry(broken, () => true), /límites|fuera/, "offsets fuera del buffer deben rechazarse");
+}
+
+{
+  const zip = buildTestZip([{ name: "quality-metrics.json", data: jsonPayload }]);
+  const artifact = { archive_download_url: "https://pipeline.invalid/zip" };
+  const deps = {
+    fetch: async () => ({ ok: true, status: 200, arrayBuffer: async () => zip })
+  };
+  const script = [
+    'import { readArtifactJson } from "./scripts/collect-quality-evidence.mjs";',
+    'const zipB64 = process.argv[1];',
+    'const zip = Buffer.from(zipB64, "base64");',
+    'const parsed = await readArtifactJson(',
+    '  { archive_download_url: "https://pipeline.invalid/zip" },',
+    '  "AlexFrigenti/example",',
+    '  { fetch: async () => ({ ok: true, status: 200, arrayBuffer: async () => zip }) }',
+    ');',
+    'if (parsed.hello !== "world") throw new Error("contenido inesperado");',
+    'console.log("PORTABLE_OK");'
+  ].join("\n");
+  const outcome = await new Promise((resolve) => {
+    const child = execFile(
+      process.execPath,
+      ["--input-type=module", "-e", script, zip.toString("base64")],
+      {
+        cwd: process.cwd(),
+        env: { ...process.env, PATH: "", Path: "" },
+        encoding: "utf8"
+      },
+      (error, stdout, stderr) => resolve({ error, stdout, stderr })
+    );
+    child.on("error", (error) => resolve({ error, stdout: "", stderr: String(error) }));
+  });
+  assert.equal(outcome.error, null, `La lectura portable no debe depender de unzip. stderr: ${outcome.stderr}`);
+  assert.match(outcome.stdout, /PORTABLE_OK/);
+}
 
 assert.throws(() => sanitizeQualityMetrics({
   ...sample,

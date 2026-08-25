@@ -1,12 +1,12 @@
-import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
-import { execFile } from "node:child_process";
-import { promisify } from "node:util";
-import { join } from "node:path";
-import { tmpdir } from "node:os";
+import { readFile } from "node:fs/promises";
+import { pathToFileURL } from "node:url";
+import { resolve } from "node:path";
 import { validateQualityMetrics } from "./validate-quality-metrics.mjs";
+import { findZipEntry } from "./zip-entry-reader.mjs";
+
+const ENTRY_NAME = "quality-metrics.json";
 
 const API_ROOT = "https://api.github.com";
-const execFileAsync = promisify(execFile);
 const token = process.env.AUDIT_TOKEN || process.env.GITHUB_TOKEN || "";
 const headers = {
   Accept: "application/vnd.github+json",
@@ -48,27 +48,10 @@ export async function readArtifactJson(artifact, repository, deps = {}) {
   const bytes = Buffer.from(await response.arrayBuffer());
   if (bytes.length > 10 * 1024 * 1024) throw new Error("El artifact supera el límite de seguridad.");
 
-  const temporaryDirectory = await mkdtemp(join(tmpdir(), "project-quality-artifact-"));
-  const archivePath = join(temporaryDirectory, "quality-metrics.zip");
-  await writeFile(archivePath, bytes);
+  const entry = findZipEntry(bytes, (name) => name === ENTRY_NAME || name.endsWith("/" + ENTRY_NAME));
+  if (!entry) throw new Error(`El artifact no contiene ${ENTRY_NAME}.`);
 
-  try {
-    const listed = await execFileAsync("unzip", ["-Z1", archivePath], {
-      encoding: "utf8",
-      maxBuffer: 1000000
-    });
-    const entries = listed.stdout.trim().split(/\r?\n/).filter(Boolean);
-    const reportPath = entries.find((entry) => entry === "quality-metrics.json" || entry.endsWith("/quality-metrics.json"));
-    if (!reportPath) throw new Error("El artifact no contiene quality-metrics.json.");
-
-    const extracted = await execFileAsync("unzip", ["-p", archivePath, reportPath], {
-      encoding: "utf8",
-      maxBuffer: 1000000
-    });
-    return JSON.parse(extracted.stdout);
-  } finally {
-    await rm(temporaryDirectory, { recursive: true, force: true });
-  }
+  return JSON.parse(entry.data.toString("utf8"));
 }
 
 function boundedText(value, maxLength) {
