@@ -3,6 +3,7 @@ import { pathToFileURL } from "node:url";
 import { resolve } from "node:path";
 import { collectQualityEvidence } from "./collect-quality-evidence.mjs";
 import { evaluateMainProtection } from "./main-protection.mjs";
+import { resilientFetch } from "./github-api-request.mjs";
 
 const API_ROOT = "https://api.github.com";
 
@@ -89,6 +90,12 @@ export async function auditRepository({ env = process.env, deps = {} } = {}) {
   }
 
   const fetchImpl = deps.fetch || globalThis.fetch;
+  const resilientDeps = {
+    fetch: fetchImpl,
+    sleep: deps.sleep,
+    now: deps.now,
+    config: deps.config
+  };
 
   async function request(path) {
     if (deps.request) {
@@ -103,16 +110,20 @@ export async function auditRepository({ env = process.env, deps = {} } = {}) {
       }
     }
     try {
-      const response = await fetchImpl(apiPath(path), { headers });
-      let data = null;
-      try {
-        data = await response.json();
-      } catch {
-        data = null;
+      const response = await resilientFetch(apiPath(path), { headers }, resilientDeps);
+      let data = response.data;
+      if (data === undefined) {
+        try {
+          data = await response.json();
+        } catch {
+          data = null;
+        }
       }
-      return { ok: response.ok, status: response.status, data };
+      // Sanitize diagnostic: never expose headers/body/URL
+      const sanitizedData = data && typeof data === "object" && !Array.isArray(data) && data.message ? { message: String(data.message).slice(0, 200) } : data;
+      return { ok: response.ok, status: response.status, data: sanitizedData };
     } catch (error) {
-      return { ok: false, status: 0, data: { message: error instanceof Error ? error.message : String(error) } };
+      return { ok: false, status: 0, data: { message: String(error instanceof Error ? error.message : error).slice(0, 200) } };
     }
   }
 
