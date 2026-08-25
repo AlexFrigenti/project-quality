@@ -3,6 +3,8 @@ import { join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { buildDashboardSummary, validateDashboard } from "./dashboard-contract.mjs";
 
+const FRESHNESS_MAX_AGE_HOURS = 192;
+
 const expectedIds = ["gestor-autonomo", "nexo", "nucleo", "nucleo-preview"];
 
 export async function assembleDashboard({
@@ -41,6 +43,7 @@ export async function assembleDashboard({
       standardRelease: env.STANDARD_RELEASE || "v1.1.0",
       standardSha: env.STANDARD_SHA || null
     },
+    freshness: { maxAgeHours: FRESHNESS_MAX_AGE_HOURS },
     summary: buildDashboardSummary(orderedReports),
     repositories: orderedReports
   };

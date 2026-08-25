@@ -72,8 +72,12 @@
       .badge { display: inline-flex; align-items: center; gap: 6px; padding: 5px 9px; border: 1px solid currentColor; border-radius: 999px; font-size: 11px; font-weight: 800; white-space: nowrap; }
       .badge.pass, .check-status.pass { color: var(--green); }
       .badge.warning, .check-status.warning, .check-status.pending { color: var(--amber); }
-      .badge.fail, .check-status.fail { color: var(--red); }
-      .badge.unknown, .check-status.unknown, .check-status.missing { color: var(--blue); }
+.badge.fail, .check-status.fail { color: var(--red); }
+.badge.unknown, .check-status.unknown, .check-status.missing { color: var(--blue); }
+.freshness { margin-top: 10px; display: inline-flex; align-items: center; gap: 8px; padding: 6px 12px; border: 1px solid currentColor; border-radius: 999px; font-size: 11px; font-weight: 800; letter-spacing: .04em; text-transform: uppercase; }
+.freshness-fresh { color: var(--green); }
+.freshness-stale, .freshness-unknown { color: var(--amber); }
+.freshness[hidden] { display: none; }
       .project-description { min-height: 48px; margin-bottom: 19px; color: var(--muted); font-size: 13px; }
       .facts { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-bottom: 20px; }
       .fact { padding: 11px 12px; border: 1px solid var(--line); border-radius: 11px; background: rgba(7, 17, 31, .45); }
@@ -149,6 +153,7 @@
           <p class="lede">Una lectura común de la salud técnica de los proyectos, respetando la arquitectura y las pruebas que necesita cada uno.</p>
         </div>
         <div class="run-meta" id="run-meta">Cargando auditoría…</div>
+        <div class="freshness" id="freshness" hidden></div>
       </header>
 
       <section class="summary" id="summary" aria-label="Resumen de calidad"></section>
@@ -230,7 +235,35 @@
 
       function statusLabel(status) { return statusText[status] || statusText.unknown; }
 
-      function renderSummary(summary) {
+      function freshnessStatus(data) {
+        const policy = data.freshness?.maxAgeHours ?? null;
+        if (!Number.isInteger(policy) || policy <= 0) {
+          return { status: "unknown", label: "No verificable", detail: "Política de frescura ausente o inválida." };
+        }
+        const generatedAt = data.generatedAt;
+        if (typeof generatedAt !== "string" || Number.isNaN(Date.parse(generatedAt))) {
+          return { status: "unknown", label: "No verificable", detail: "Fecha de generación ausente o inválida." };
+        }
+        const ageHours = (Date.now() - Date.parse(generatedAt)) / 3600000;
+        if (ageHours < 0) {
+          return { status: "unknown", label: "No verificable", detail: "La fecha de generación está en el futuro." };
+        }
+        if (ageHours <= policy) {
+          return { status: "fresh", label: "Fresca", detail: "Evidencia generada hace " + ageHours.toFixed(1) + " h (límite " + policy + " h)." };
+        }
+        return { status: "stale", label: "Antigua", detail: "Evidencia generada hace " + Math.round(ageHours) + " h; supera el límite de " + policy + " h. Ejecuta el workflow semanal." };
+      }
+
+      function renderFreshness(data) {
+        const freshness = freshnessStatus(data);
+        const element = document.getElementById("freshness");
+        element.className = "freshness freshness-" + freshness.status;
+        element.hidden = false;
+        element.textContent = "Frescura: " + freshness.label + " · " + freshness.detail;
+        element.title = "Generada: " + formatDate(data.generatedAt);
+      }
+
+  function renderSummary(summary) {
         const items = [
           ["Saludables", summary.pass, "pass", "evidencia completa"],
           ["Para revisar", summary.warning, "warning", "acceso o señales pendientes"],
@@ -349,6 +382,7 @@
           if (!response.ok) throw new Error(`HTTP ${response.status}`);
           const data = await response.json();
           renderSummary(data.summary);
+          renderFreshness(data);
           document.getElementById("projects").innerHTML = data.repositories.map(renderRepository).join("");
           document.getElementById("standard-release").textContent = data.source?.standardRelease || "sin versión";
           document.getElementById("run-meta").innerHTML = `Última auditoría<strong>${escapeHtml(formatDate(data.generatedAt))}</strong><span>${escapeHtml(data.summary.total)} repositorios · ${escapeHtml(data.summary.qualityGreen)} checks verdes</span>`;
