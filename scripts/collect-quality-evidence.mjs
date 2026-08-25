@@ -232,13 +232,25 @@ function candidateRejection(summary, run, { defaultBranch, currentCommitSha }) {
 }
 
 async function evaluateLatestRun(run, { repository, defaultBranch, currentCommitSha, exposeLinks, fetchImpl, readArtifact }) {
-  const artifactsResponse = await fetchImpl("/repos/" + repository + "/actions/runs/" + run.id + "/artifacts?per_page=100");
-  if (!artifactsResponse.ok) {
-    return { cause: "no se pudieron consultar los artifacts de la ejecución más reciente del commit actual" };
+  const allArtifacts = [];
+  for (let page = 1; page <= 100; page += 1) {
+    const artifactsPath = "/repos/" + repository + "/actions/runs/" + run.id + "/artifacts?per_page=100&page=" + page;
+    const artifactsResponse = await fetchImpl(artifactsPath);
+    if (!artifactsResponse.ok) {
+      return { cause: "no se pudo completar la paginación de artifacts de la ejecución más reciente del commit actual. La paginación quedó incompleta. (página " + page + ")" };
+    }
+    const batch = artifactsResponse.data?.artifacts;
+    if (!Array.isArray(batch)) {
+      return { cause: "la respuesta de artifacts no es válida y la paginación quedó incompleta. (página " + page + ")" };
+    }
+    allArtifacts.push(...batch);
+    if (batch.length < 100) break;
+    if (page === 100) {
+      return { cause: "se alcanzó el límite de 100 páginas al paginar artifacts; la paginación quedó incompleta" };
+    }
   }
 
-  const artifact = (artifactsResponse.data?.artifacts || [])
-    .find((item) => item.name === "quality-metrics" && item.expired !== true);
+  const artifact = allArtifacts.find((item) => item.name === "quality-metrics" && item.expired !== true);
   if (!artifact) {
     return { cause: "la ejecución más reciente del commit actual no tiene un artifact quality-metrics disponible" };
   }
@@ -282,17 +294,35 @@ export async function collectQualityEvidence({
     return unavailableQualityEvidence("No se pudo resolver el HEAD actual de la rama estable.", currentCommitSha);
   }
 
-  const runsPath = "/repos/" + repository + "/actions/workflows/" + encodeURIComponent(workflowFile)
-    + "/runs?branch=" + encodeURIComponent(defaultBranch) + "&per_page=50";
-  const runsResponse = await fetchImpl(runsPath);
-  if (!runsResponse.ok) {
-    return unavailableQualityEvidence(
-      "No se pudo consultar el historial de Actions.",
-      currentCommitSha
-    );
+  const allRuns = [];
+  for (let page = 1; page <= 100; page += 1) {
+    const runsPath = "/repos/" + repository + "/actions/workflows/" + encodeURIComponent(workflowFile)
+      + "/runs?branch=" + encodeURIComponent(defaultBranch) + "&per_page=100&page=" + page;
+    const runsResponse = await fetchImpl(runsPath);
+    if (!runsResponse.ok) {
+      return unavailableQualityEvidence(
+        "No se pudo completar la paginación del historial de Actions. La paginación quedó incompleta. (página " + page + ", HTTP " + runsResponse.status + ")",
+        currentCommitSha
+      );
+    }
+    const batch = runsResponse.data?.workflow_runs;
+    if (!Array.isArray(batch)) {
+      return unavailableQualityEvidence(
+        "La respuesta de workflow runs no es válida y la paginación quedó incompleta. (página " + page + ")",
+        currentCommitSha
+      );
+    }
+    allRuns.push(...batch);
+    if (batch.length < 100) break;
+    if (page === 100) {
+      return unavailableQualityEvidence(
+        "Se alcanzó el límite de 100 páginas al paginar workflow runs; la paginación quedó incompleta.",
+        currentCommitSha
+      );
+    }
   }
 
-  const candidates = (runsResponse.data?.workflow_runs || [])
+  const candidates = allRuns
     .filter((run) => run.status === "completed" && run.head_sha === currentCommitSha)
     .sort((left, right) => Date.parse(right.created_at || "") - Date.parse(left.created_at || ""));
 
