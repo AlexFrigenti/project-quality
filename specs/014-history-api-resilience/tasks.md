@@ -17,18 +17,18 @@
 - [ ] Prueba 11 RED→GREEN: paginación (release en página 2 descubierto, límite 100 páginas, respuestas malformadas)
 
 ## Fase 2 — Reconciliación de creación de release (POST no idempotente)
-- [ ] Implementar en `scripts/persist-quality-history.mjs`: `GET tag` previo → POST único con timeout → si transitorio, GET tag resiliente → si 404 concluyente segundo POST único → reconsulta final → éxito o fallo cerrado (máx 2 POST)
-- [ ] Prueba 3 RED→GREEN: POST timeout + GET encuentra tag → éxito sin segundo POST
-- [ ] Prueba 4 RED→GREEN: POST timeout + GET 404 concluyente + segundo POST 201 → éxito
-- [ ] Prueba 7a RED→GREEN: fallo ambiguo persistente (GET agota reintentos) → sin tercer POST, fail-closed
+- [ ] Implementar en `scripts/persist-quality-history.mjs`: `GET /releases/tags/{tag}` previo (404 concluyente = respuesta válida 404) → POST único con timeout → si transitorio, `GET /releases/tags/{tag}` resiliente → si 200 existe → éxito sin segundo POST; si **404 concluyente endpoint-específico** (`GET` 404 válido) → segundo POST único → reconsulta final endpoint-específica → éxito o fallo cerrado (máx 2 POST, 404 del propio POST nunca habilita)
+- [ ] Prueba 3 RED→GREEN: POST timeout + GET tag 200 → éxito sin segundo POST
+- [ ] Prueba 4 RED→GREEN: POST timeout + GET tag 404 concluyente + segundo POST 201 → éxito
+- [ ] Prueba 7a RED→GREEN: fallo ambiguo persistente (GET tag agota reintentos / 5xx / 401 / paginación incompleta) → sin tercer POST, fail-closed, sin manifest de asset
 
 ## Fase 3 — Reconciliación de subida de asset (POST no idempotente)
-- [ ] Implementar en `scripts/persist-quality-history.mjs`: búsqueda global resiliente previa → POST único → si transitorio, rebúsqueda → si existe éxito, si 404 concluyente segundo POST → rebúsqueda final
-- [ ] Prueba 5 RED→GREEN: POST upload timeout + rebúsqueda encuentra asset → éxito sin segundo POST
-- [ ] Prueba 6 RED→GREEN: POST timeout + rebúsqueda 404 + segundo POST 201 → éxito
-- [ ] Prueba 7b RED→GREEN: rebúsqueda incierta tras fallo → sin tercer POST, fail-closed
+- [ ] Implementar en `scripts/persist-quality-history.mjs`: búsqueda global resiliente previa (200 válido sin coincidencia = ausencia concluyente) → POST único → si transitorio, rebúsqueda global → si existe (200 válido con match) → éxito; si ausencia concluyente (200 válido sin match) → segundo POST → rebúsqueda final; si rebúsqueda incierta (404, JSON inválido, timeout, red, 5xx, 401/403, paginación incompleta) → fail-closed sin tercer POST y sin declarar éxito; 404 del propio POST nunca prueba ausencia
+- [ ] Prueba 5 RED→GREEN: POST upload timeout + rebúsqueda encuentra asset (200 válido) → éxito sin segundo POST
+- [ ] Prueba 6 RED→GREEN: POST timeout + rebúsqueda ausencia concluyente (200 válido sin match) + segundo POST 201 → éxito
+- [ ] Prueba 7b RED→GREEN: rebúsqueda incierta (404 / timeout / 5xx / paginación incompleta) tras fallo → sin tercer POST, fail-closed
 - [ ] Prueba 9 RED→GREEN: 0 DELETE en todos los escenarios
-- [ ] Prueba 10 RED→GREEN: asset existente nunca dispara PUT/PATCH ni POST adicional
+- [ ] Prueba 10 RED→GREEN: asset existente (incluso tras fallo ambiguo) nunca dispara PUT/PATCH ni POST adicional
 
 ## Fase 4 — Workflow, integración y verificación
 - [ ] Añadir `scripts/test-history-api-resilience.mjs` con las 12 pruebas herméticas (sleep/now/config inyectados, fixtures completos)

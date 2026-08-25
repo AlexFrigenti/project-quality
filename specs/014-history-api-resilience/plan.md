@@ -14,13 +14,13 @@
 
 ### Fase 2 — Reconciliación acotada para creación de release (POST no idempotente)
 - **Archivos**: `scripts/persist-quality-history.mjs` (`getOrCreateRelease` y `persist-quality-history.mjs` → `persistSnapshot`), `scripts/github-api-request.mjs` (`singleAttemptFetch`), `scripts/test-history-api-resilience.mjs`.
-- **Pasos**: `GET tag` previo → `POST` único con timeout → si transitorio, `GET tag` resiliente → si `404` concluyente, segundo `POST` único → reconsulta final → éxito o fallo cerrado sin tercer POST.
-- **Verificación**: Pruebas 3, 4 y 7 (segundo caso de fallo ambiguo persistente).
+- **Pasos**: `GET /releases/tags/{tag}` previo → `POST` único con timeout → si transitorio, `GET /releases/tags/{tag}` resiliente → si `404` concluyente de ese endpoint específico (respuesta válida `404`), segundo `POST` único → reconsulta final endpoint-específica → éxito o fallo cerrado sin tercer POST. Un `404` del propio `POST` nunca habilita el segundo POST.
+- **Verificación**: Pruebas 3, 4 y 7 (segundo caso de fallo ambiguo persistente + estado incierto por reconsulta no concluyente).
 
 ### Fase 3 — Reconciliación acotada para subida de asset
 - **Archivos**: `scripts/persist-quality-history.mjs` (`persistSnapshot` búsqueda global + subida), `scripts/test-history-api-resilience.mjs`.
-- **Pasos**: Búsqueda global resiliente previa → `POST upload` único → si transitorio, rebúsqueda global → si existe éxito, si `404` concluyente segundo `POST` único → rebúsqueda final.
-- **Verificación**: Pruebas 5, 6, 7, 9 (sin reemplazo), 10 (sin DELETE).
+- **Pasos**: Búsqueda global resiliente previa (200 válido sin coincidencia = ausencia concluyente) → `POST upload` único → si transitorio, rebúsqueda global → si existe (match exacto en listado 200 válido) éxito, si ausencia concluyente (200 válido sin match) segundo `POST` único → rebúsqueda final. Cualquiera de `404`, JSON inválido, timeout, red, `5xx`, `401`/`403` o paginación incompleta en la rebúsqueda es **estado incierto** → fail-closed sin tercer POST y sin declarar éxito; un `404` del propio `POST` nunca prueba ausencia.
+- **Verificación**: Pruebas 5, 6, 7, 9 (sin reemplazo), 10 (sin DELETE) + regresión de `404`/paginación incompleta como incierto.
 
 ### Fase 4 — Integración y workflow
 - **Archivos**: `.github/workflows/quality-dashboard.yml` (`pull_request.paths`, `push.paths`, step `Validate history API resilience` en `assemble`), `specs/014-history-api-resilience/*`, `QUALITY_HISTORY.md` (nota de resiliencia si procede).

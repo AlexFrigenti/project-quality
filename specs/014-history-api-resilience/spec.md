@@ -36,35 +36,42 @@ Aplicar resiliencia acotada al pipeline de histórico (`collect` y `persist`) si
 No se permite envolver `POST /repos/{owner}/{repo}/releases` (creación) ni `POST {upload_url}?name=` (subida) con el retry genérico ciego.
 
 ### A. Creación de release
-Estado inicial: se ha ejecutado `GET /releases/tags/{tag}` y no existe (404) de forma concluyente.
+- **Ausencia concluyente (release)**: solo un `GET /releases/tags/{tag}` exitoso que devuelve **404** con respuesta válida (JSON parseable, sin timeout/red agotado, sin `5xx`, sin `401`/`403` con rate-limit, sin paginación incompleta) prueba ausencia concluyente. Un `404` devuelto por el propio `POST` de creación **nunca** es prueba de ausencia.
+- Estado inicial: se ha ejecutado `GET /releases/tags/{tag}` con resiliencia GET y ha devuelto **404 concluyente** (según definición anterior).
 1. Ejecutar `POST /releases` con `tag_name`, `target_commitish`, `name`, `body`, `draft:false`, `prerelease:false` mediante **una sola tentativa con timeout** (`singleAttemptFetch`).
 2. Si responde `2xx`, usar el release devuelto y continuar.
 3. Si hay red, timeout o error transitorio (`408,429,500,502,503,504,403+rate-limit`):
    a. Reconsultar `GET /releases/tags/{tag}` con resiliencia GET (3 intentos).
-   b. Si existe (`200`), considerar la creación completada y usar ese release.
-   c. Si no existe (`404`) y la consulta fue concluyente (respuesta `404` no transitoria), permitir **como máximo un nuevo POST** (segunda tentativa única con timeout).
-   d. Tras ese segundo POST: reconsultar una vez más el tag con resiliencia GET; si existe, éxito; si no existe y fue concluyente, fallar sin crear más.
-   e. Si la reconsulta es incierta (agotó reintentos GET o error no concluyente), fallar sin crear más y sin manifest de asset.
-4. Si el POST devuelve error definitivo (`401,404,422,otros 4xx` no rate-limit), fallar de forma trazable y sanitizada sin reintento.
+   b. Si existe (`200` con JSON válido), considerar la creación completada y usar ese release.
+   c. Si devuelve **404 concluyente** (misma definición que arriba), permitir **como máximo un nuevo POST** (segunda tentativa única con timeout).
+   d. Tras ese segundo POST: reconsultar una vez más el tag con resiliencia GET; si existe (`200`), éxito; si devuelve `404` concluyente, fallar sin crear más.
+   e. Si la reconsulta es **incierta** (agotó reintentos, `5xx`, `401`/`403`/`422`, timeout/red, JSON inválido, paginación incompleta), fallar inmediatamente sin crear más y sin manifest de asset.
+4. Si el POST devuelve error definitivo (`401,422,otros 4xx` definitivos) o `404` del propio POST, fallar de forma trazable y sanitizada sin reintento.
 
-Límite absoluto: **máximo 2 POST** por operación de creación, separados siempre por una reconsulta concluyente.
+Límite absoluto: **máximo 2 POST** por operación de creación, cada segundo POST autorizado exclusivamente por una reconsulta previa con ausencia concluyente del endpoint específico (`GET /releases/tags/{tag}` → `404` concluyente).
 
 ### B. Subida de asset
-Precondición: la búsqueda global previa por nombre exacto (`quality-snapshot-<id>.json` en todos los releases históricos paginados) no encontró el asset.
+- **Ausencia concluyente (asset)**: solo una búsqueda global resiliente que devuelve **200** con JSON válido, `artifacts` array válido en todas las páginas, paginación completa sin truncamiento, sin timeout/red/`5xx`/`401`/`403`, y **sin coincidencia exacta por nombre** (`quality-snapshot-<id>.json`) en ningún release prueba ausencia concluyente. Un `404`, JSON inválido, timeout, error de red, `5xx`, `401`/`403`, paginación incompleta o un `404` del propio `POST` de subida son **estado incierto** y nunca prueban ausencia.
+- Precondición: la búsqueda global previa por nombre exacto no encontró el asset de forma concluyente (según definición anterior).
 1. Ejecutar `POST {upload_url}?name={assetName}` con `Content-Type: application/octet-stream` mediante **una sola tentativa con timeout**.
 2. Si responde `2xx` (`201`), terminar.
-3. Si hay red, timeout o error transitorio:
+3. Si hay red, timeout o error transitorio (`408,429,500,502,503,504,403+rate-limit`):
    a. Rebuscar el asset exacto mediante la búsqueda global resiliente.
-   b. Si existe, considerarlo ya persistido (caso de éxito ambiguo donde GitHub creó el asset pese al error).
-   c. Si no existe y la búsqueda fue concluyente, permitir **como máximo un nuevo POST** (segunda tentativa única).
-   d. Tras ese segundo POST: rebuscar una vez más; si existe, éxito; si no existe y fue concluyente, fallar.
-   e. Si la rebúsqueda es incierta, fallar.
-4. Nunca sobrescribir ni borrar un asset; la existencia, aunque aparezca tras un fallo ambiguo, se considera éxito y no se vuelve a subir.
+   b. Si existe (encontrado en listado `200` válido), considerarlo ya persistido (éxito ambiguo donde GitHub creó el asset pese al error).
+   c. Si la rebúsqueda devuelve ausencia concluyente (definición anterior), permitir **como máximo un nuevo POST** (segunda tentativa única).
+   d. Tras ese segundo POST: rebuscar una vez más; si existe, éxito; si devuelve ausencia concluyente, fallar sin crear más.
+   e. Si la rebúsqueda es **incierta** (cualquiera de los estados inciertos listados), fallar inmediatamente sin tercer POST y sin declarar éxito.
+4. Nunca sobrescribir ni borrar un asset; la existencia concluyente, aunque aparezca tras un fallo ambiguo, se considera éxito y no se vuelve a subir.
 
-Límite absoluto: **máximo 2 POST** por subida, con rebúsqueda concluyente entre ellos. Nunca `DELETE`/`PUT`/`PATCH`.
+Límite absoluto: **máximo 2 POST** por subida, cada segundo POST autorizado exclusivamente por una rebúsqueda previa con ausencia concluyente del endpoint específico (listado de assets `200` válido sin coincidencia). Nunca `DELETE`/`PUT`/`PATCH`.
 
-## 3. Errores definitivos
-`401` (credenciales), `404` no reconciliable (recurso realmente ausente tras consulta concluyente), `422` (entidad no procesable) y otros `4xx` definitivos (excepto los listados como transitorios) no se reintentan automáticamente. Deben producir un fallo trazable, sanitizado (sin tokens, sin `Authorization`, sin cuerpos completos, sin URLs con credenciales) y con tipo diagnosticable (`http`/`rate-limit` según corresponda). `404` en la reconsulta de un tag/asset **es un éxito de reconciliación** (ausencia concluyente), no un error definitivo a propagar como fallo de negocio, y habilita el segundo POST.
+## 3. Errores definitivos y semántica de ausencia
+
+- **GET resiliente**: `401`, `422` y otros `4xx` definitivos no se reintentan; `404` se reintenta solo si es transitorio según política (no aplica: `404` no está en la lista de reintentos), por lo que un `404` concluyente se devuelve tal cual.
+- **POST no idempotente**: `401`, `404` del propio POST, `422` y otros `4xx` definitivos devueltos por el `POST` no se reintentan ni se reinterpretan; fallan de forma trazable y sanitizada.
+- **Reconciliación — release**: un `404` concluyente del endpoint específico `GET /releases/tags/{tag}` (definición en §2.A) **sí habilita** el segundo POST; es éxito de reconciliación, no error de negocio.
+- **Reconciliación — asset**: solo un listado `200` válido sin coincidencia habilita el segundo POST. Un `404`, JSON inválido, timeout, red, `5xx`, `401`/`403` o paginación incompleta en la rebúsqueda global son **estado incierto** y habilitan exclusivamente fail-closed (sin tercer POST, sin DELETE, sin éxito). Un `404` del propio `POST` de subida nunca es prueba de ausencia.
+- Todos los fallos definitivos deben ser trazables, sanitizados (sin tokens, sin `Authorization`, sin cuerpos completos, sin URLs con credenciales) y con tipo diagnosticable (`http`/`rate-limit`).
 
 ## 4. Interfaces y límites
 
