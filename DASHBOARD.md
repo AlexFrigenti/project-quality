@@ -36,15 +36,17 @@ Los informes privados no contienen URLs ni referencias de evidencia públicas. L
 
 Si todavía no existe evidencia para ese commit, el panel muestra `Evidencia pendiente para el commit actual`. Eso no se interpreta automáticamente como un fallo de calidad. Cuando la ejecución completada más reciente del commit —que es la autoritativa— tiene una evidencia que no puede utilizarse (artifact ilegible, informe que contradice la conclusión real del workflow o de otro intento), el panel lo distingue como evidencia no utilizable e indica la causa, sin sobrestimar la calidad ni retroceder a ejecuciones anteriores.
 
-## Frescura temporal de la evidencia
+## Antigüedad de la publicación
 
-`data.json` publica la política de frescura mediante `freshness.maxAgeHours: 192`: una semana de cadencia más 24 horas de margen. El estado no se calcula durante el build —quedaría congelado— sino en el navegador al abrir Pages, comparando `generatedAt` con la hora actual:
+`data.json` publica la política mediante `freshness.maxAgeHours: 192`: una semana de cadencia más 24 horas de margen. El estado no se calcula durante el build —quedaría congelado— sino en el navegador al abrir Pages, comparando `generatedAt` con la hora actual:
 
 - `Fresca`: fecha válida, no futura y edad ≤ 192 horas;
 - `Antigua`: fecha válida y edad > 192 horas; se muestra como advertencia ámbar;
 - `No verificable`: fecha ausente, inválida o futura, o política inválida; también advertencia, nunca verde.
 
-La frescura es independiente del `summary`, los repositorios, los gates y las conclusiones de calidad: no añade contadores ni puntuaciones y solo describe la edad de la evidencia publicada. No participa en el `snapshotId` ni provoca reescrituras del histórico.
+Este estado describe **cuándo se publicó el dashboard**, no cambios en tiempo real de los repositorios externos. La auditoría comprueba el HEAD externo de cada proyecto en el momento de ejecutarse; `qualityEvidence: current` significa que la evidencia es válida para ese HEAD observado. Un cambio posterior en un repositorio externo no se detecta hasta la siguiente ejecución: la cadencia actual es semanal, además de la ejecución manual (`workflow_dispatch`) y los pushes con cambios relevantes al dashboard.
+
+La antigüedad es independiente del `summary`, los repositorios, los gates y las conclusiones de calidad: no añade contadores ni puntuaciones y solo describe cuándo se generó la última publicación. No participa en el `snapshotId` ni provoca reescrituras del histórico.
 
 ## Acceso al repositorio privado
 

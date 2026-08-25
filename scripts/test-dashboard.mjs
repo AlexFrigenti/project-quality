@@ -650,6 +650,18 @@ try {
     /unknown[\s\S]{0,200}(badge\.warning|badge\.unknown)|freshness-unknown/,
     "unknown debe mostrarse como advertencia o no-verde"
   );
+  // PQ-OX10: transparencia sobre la antigüedad de la publicación
+  assert.ok(html.includes("Antigüedad de la publicación"), "Debe hablarse de antigüedad de la publicación");
+  assert.ok(html.includes("Publicación generada hace"), 'El detalle debe decir "Publicación generada hace…"');
+  assert.equal(html.includes("Evidencia generada hace"), false, "El lenguaje anterior de evidencia debe desaparecer");
+  assert.ok(
+    html.includes("Este estado describe cuándo se publicó el dashboard."),
+    "Debe mostrarse la nota de limitación (parte 1)"
+  );
+  assert.ok(
+    html.includes("No detecta cambios posteriores en los repositorios externos hasta la siguiente auditoría."),
+    "Debe mostrarse la nota de limitación (parte 2)"
+  );
 }
 
 // -------------------------------------------------------------
