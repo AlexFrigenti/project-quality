@@ -199,14 +199,16 @@ function buildValidDashboard() {
   assert.throws(() => validateDashboard(noFreshness), /freshness/, "freshness debe ser obligatorio");
 }
 
-// 1.1.b maxAgeHours inválido: ausente, cero, negativo, decimal, no numérico, null
+// 1.1.b maxAgeHours inválido: ausente, cero, negativo, decimal, no numérico, null, 191, 193
 for (const [label, mutate] of [
   ["ausente", (f) => ({ maxAgeHours: undefined })],
   ["cero", (f) => ({ maxAgeHours: 0 })],
   ["negativo", (f) => ({ maxAgeHours: -24 })],
   ["decimal", (f) => ({ maxAgeHours: 192.5 })],
   ["no numérico", (f) => ({ maxAgeHours: "192" })],
-  ["null", (f) => ({ maxAgeHours: null })]
+  ["null", (f) => ({ maxAgeHours: null })],
+  ["191", (f) => ({ maxAgeHours: 191 })],
+  ["193", (f) => ({ maxAgeHours: 193 })]
 ]) {
   const broken = buildValidDashboard();
   broken.freshness = { ...mutate() };
@@ -670,6 +672,8 @@ try {
     dashboardCommitSha: dashboardSha
   });
   assert.ok(snapA && snapB);
+  assert.equal(snapA.identityVersion, 2, "El pin de compatibilidad corresponde a snapshots v2");
+  assert.equal(snapB.identityVersion, 2, "El pin de compatibilidad corresponde a snapshots v2");
   assert.equal(snapA.id, snapB.id, "freshness/generatedAt no participan en snapshotId");
   assert.notEqual(snapA.generatedAt, snapB.generatedAt);
 }

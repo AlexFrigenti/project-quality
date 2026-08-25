@@ -456,8 +456,8 @@ function validateFreshness(value) {
   const keys = Object.keys(value);
   assert(keys.length === 1 && keys[0] === "maxAgeHours", "freshness solo puede contener maxAgeHours");
   assert(
-    Number.isInteger(value.maxAgeHours) && value.maxAgeHours > 0,
-    "freshness.maxAgeHours debe ser un entero positivo (horas)"
+    value.maxAgeHours === FRESHNESS_MAX_AGE_HOURS,
+    "freshness.maxAgeHours debe ser exactamente " + FRESHNESS_MAX_AGE_HOURS + " horas"
   );
 }
 
