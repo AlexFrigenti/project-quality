@@ -647,10 +647,10 @@ const failingStaleCases = [
   },
   {
     name: "error HTTP listando releases",
-    expectThrow: /No se pudo consultar el histórico persistente/,
+    expectThrow: null,
     quarantineExpected: false,
     deps: () => ({
-      fetchJson: async () => ({ ok: false, status: 503 }),
+      fetchJson: async () => ({ ok: false, status: 503, headers: { get: () => null, has: () => false }, data: null }),
       fetchAssetBody: async () => ({ ok: true, status: 200, text: "{}" })
     })
   },

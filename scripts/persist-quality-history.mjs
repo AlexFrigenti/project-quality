@@ -9,11 +9,73 @@ import {
 } from "./quality-contract.mjs";
 import { validateQualityHistory } from "./validate-quality-history.mjs";
 import { listHistoryReleases, listReleaseAssets } from "./history-pagination.mjs";
+import { withRetry, singleAttemptFetch, resilientFetch } from "./github-api-request.mjs";
 
 const API_ROOT = "https://api.github.com";
 const TOKEN_PATTERN = /(gh[pousr]_[A-Za-z0-9_]+|github_pat_[A-Za-z0-9_]+|Bearer\s+[A-Za-z0-9._-]+)/i;
 const PROCESS_STATUSES = new Set(["pass", "warning", "fail", "unknown", "pending", "missing", "not_applicable"]);
 const QUALITY_STATUSES = new Set(["current", "pending", "unavailable"]);
+
+function isConclusive404ForTag(res) {
+  return res && res.status === 404 && res.data !== null && typeof res.data === "object" && !Array.isArray(res.data);
+}
+
+function isTransientPostStatus(status, headers) {
+  if (status === 408 || status === 429 || status === 500 || status === 502 || status === 503 || status === 504) return true;
+  if (status === 403) {
+    const v = headers?.get ? headers.get("x-ratelimit-remaining") : headers?.["x-ratelimit-remaining"];
+    return v === "0" || v === 0;
+  }
+  return false;
+}
+
+async function resilientGetTag(tag, repo, token, deps) {
+  const operation = async () => {
+    if (deps.request) return deps.request(`/repos/${repo}/releases/tags/${tag}`, { token });
+    const res = await resilientFetch(apiUrl(`/repos/${repo}/releases/tags/${tag}`), { headers: authHeaders(token) }, deps);
+    let data = null;
+    try { data = await res.json(); } catch {}
+    return { ok: res.ok, status: res.status, data, headers: res.headers, errorType: res.errorType };
+  };
+  return withRetry(operation, deps);
+}
+
+async function singlePostRelease(repo, tag, period, token, targetCommit, deps) {
+  const body = {
+    tag_name: tag,
+    target_commitish: targetCommit,
+    name: "Quality history " + period,
+    body: "Snapshots sanitizados de calidad validados durante " + period + ".",
+    draft: false,
+    prerelease: false,
+    generate_release_notes: false
+  };
+  if (deps.request) return deps.request(`/repos/${repo}/releases`, { token, method: "POST", body });
+  const res = await singleAttemptFetch(apiUrl(`/repos/${repo}/releases`), { method: "POST", headers: { ...authHeaders(token), "Content-Type": "application/json" }, body: JSON.stringify(body) }, deps);
+  let data = null;
+  try { data = await res.json(); } catch {}
+  return { ok: res.ok, status: res.status, data, headers: res.headers };
+}
+
+async function findAssetResilient(assetName, repo, token, deps, perPage) {
+  const fetchJson = async (path) => {
+    const operation = async () => {
+      if (deps.request) return deps.request(path, { token });
+      const res = await resilientFetch(apiUrl(path), { headers: authHeaders(token) }, deps);
+      let data = null;
+      try { data = await res.json(); } catch {}
+      return { ok: res.ok, status: res.status, data, headers: res.headers, errorType: res.errorType };
+    };
+    return withRetry(operation, deps);
+  };
+  const releases = await listHistoryReleases(repo, fetchJson, { perPage });
+  for (const release of releases) {
+    const assets = await listReleaseAssets(repo, release, fetchJson, { perPage });
+    const found = assets.find((a) => a?.name === assetName);
+    if (found) return { found: true, release, asset: found };
+  }
+  return { found: false };
+}
 
 function requireText(value, name) {
   if (typeof value !== "string" || value.trim() === "") throw new Error(name + " es obligatorio.");
@@ -283,16 +345,17 @@ async function githubRequest(path, { token, method = "GET", body, accept } = {})
   return { ok: response.ok, status: response.status, data };
 }
 
-async function getOrCreateRelease({ repository, period, token, targetCommit, request = githubRequest }) {
+async function getOrCreateRelease({ repository, period, token, targetCommit, deps = {} }) {
   const tag = "quality-history-" + period;
-  const existing = await request(`/repos/${repository}/releases/tags/${tag}`, { token });
-  if (existing.ok) return existing.data;
-  if (existing.status !== 404) throw new Error("No se pudo consultar el release histórico.");
+  const request = deps.request || githubRequest;
 
-  const created = await request(`/repos/${repository}/releases`, {
-    token,
-    method: "POST",
-    body: {
+  async function resilientGetTag() {
+    const operation = async () => request(`/repos/${repository}/releases/tags/${tag}`, { token });
+    return withRetry(operation, deps);
+  }
+
+  async function singlePostRelease() {
+    const body = {
       tag_name: tag,
       target_commitish: targetCommit,
       name: "Quality history " + period,
@@ -300,10 +363,72 @@ async function getOrCreateRelease({ repository, period, token, targetCommit, req
       draft: false,
       prerelease: false,
       generate_release_notes: false
+    };
+    if (deps.request) {
+      return deps.request(`/repos/${repository}/releases`, { token, method: "POST", body });
     }
-  });
-  if (!created.ok) throw new Error("No se pudo crear el release histórico.");
-  return created.data;
+    const res = await singleAttemptFetch(apiUrl(`/repos/${repository}/releases`), { method: "POST", headers: { ...authHeaders(token), "Content-Type": "application/json" }, body: JSON.stringify(body) }, deps);
+    let data = null;
+    try { data = await res.json(); } catch {}
+    return { ok: res.ok, status: res.status, data, headers: res.headers };
+  }
+
+  let firstGet;
+  try {
+    firstGet = await resilientGetTag();
+  } catch (e) {
+    throw new Error("No se pudo consultar el release histórico: " + String(e.message || e).slice(0, 200));
+  }
+  if (firstGet.ok) return firstGet.data;
+  if (!isConclusive404ForTag(firstGet)) {
+    throw new Error("No se pudo verificar ausencia del release " + tag + ": HTTP " + firstGet.status);
+  }
+
+  let firstPost;
+  let firstPostThrew = false;
+  try {
+    firstPost = await singlePostRelease();
+  } catch (e) {
+    firstPostThrew = true;
+    firstPost = { thrown: e };
+  }
+  if (!firstPostThrew && firstPost.ok) return firstPost.data;
+  if (!firstPostThrew && !isTransientPostStatus(firstPost.status, firstPost.headers)) {
+    throw new Error("POST falló definitivo: HTTP " + firstPost.status);
+  }
+
+  let reconciled;
+  try {
+    reconciled = await resilientGetTag();
+  } catch (e) {
+    throw new Error("Fallo ambiguo sin tercer POST: no se pudo reconciliar tras POST");
+  }
+  if (reconciled.ok) return reconciled.data;
+  if (!isConclusive404ForTag(reconciled)) {
+    throw new Error("Fallo ambiguo sin ausencia concluyente");
+  }
+
+  let secondPost;
+  let secondPostThrew = false;
+  try {
+    secondPost = await singlePostRelease();
+  } catch (e) {
+    secondPostThrew = true;
+    secondPost = { thrown: e };
+  }
+  if (!secondPostThrew && secondPost.ok) return secondPost.data;
+  if (!secondPostThrew && !isTransientPostStatus(secondPost.status, secondPost.headers) && secondPost.status !== 0) {
+    throw new Error("Segundo POST falló: HTTP " + secondPost.status);
+  }
+
+  let finalCheck;
+  try {
+    finalCheck = await resilientGetTag();
+  } catch (e) {
+    throw new Error("Fallo ambiguo persistente sin tercer POST");
+  }
+  if (finalCheck.ok) return finalCheck.data;
+  throw new Error("Fallo ambiguo persistente sin tercer POST");
 }
 
 async function uploadAsset(release, name, content, token) {
@@ -321,34 +446,86 @@ async function uploadAsset(release, name, content, token) {
   if (!response.ok) throw new Error("No se pudo publicar el asset histórico.");
 }
 
+async function singleUploadAssetResilient(release, name, content, token, deps) {
+  if (deps.upload) {
+    const result = await deps.upload({ release, name, content });
+    if (result === undefined) return { ok: true, status: 201, headers: { get: () => null, has: () => false } };
+    return result;
+  }
+  const uploadUrl = String(release.upload_url || "").replace(/\{\?.*$/, "") + "?name=" + encodeURIComponent(name);
+  const res = await singleAttemptFetch(uploadUrl, { method: "POST", headers: { ...authHeaders(token), "Content-Type": "application/octet-stream", "Content-Length": String(Buffer.byteLength(content)) }, body: content }, deps);
+  return { ok: res.ok, status: res.status, headers: res.headers };
+}
+
 export async function persistSnapshot(snapshot, { repository, token, targetCommit, deps = {} } = {}) {
   const repo = requireText(repository, "GITHUB_REPOSITORY");
   const secret = requireText(token, "GITHUB_TOKEN");
   validateQualityHistory(snapshot);
   const period = snapshot.generatedAt.slice(0, 7);
   const assetName = "quality-snapshot-" + snapshot.id + ".json";
-
-  const request = deps.request || githubRequest;
-  const performUpload = deps.upload || (({ release, name, content }) => uploadAsset(release, name, content, secret));
   const perPage = deps.perPage;
 
-  const fetchJson = async (path) => request(path, { token: secret });
-  for (const release of await listHistoryReleases(repo, fetchJson, { perPage })) {
-    const assets = await listReleaseAssets(repo, release, fetchJson, { perPage });
-    if (assets.some((asset) => asset?.name === assetName)) {
-      return {
-        created: false,
-        period,
-        assetName,
-        existingRelease: { id: release.id, tag: release.tag_name }
-      };
-    }
+  let findResult;
+  try {
+    findResult = await findAssetResilient(assetName, repo, secret, deps, perPage);
+  } catch (e) {
+    throw new Error("No se pudo buscar asset existente: " + String(e.message || e).slice(0, 200));
+  }
+  if (findResult.found) {
+    return {
+      created: false,
+      period,
+      assetName,
+      existingRelease: { id: findResult.release.id, tag: findResult.release.tag_name }
+    };
   }
 
-  const release = await getOrCreateRelease({ repository: repo, period, token: secret, targetCommit: targetCommit || "main", request });
-  const content = JSON.stringify(snapshot, null, 2) + "\n";
-  await performUpload({ release, name: assetName, content });
-  return { created: true, period, assetName };
+  const release = await getOrCreateRelease({ repository: repo, period, token: secret, targetCommit: targetCommit || "main", deps });
+
+  let firstUpload;
+  let firstUploadThrew = false;
+  try {
+    firstUpload = await singleUploadAssetResilient(release, assetName, JSON.stringify(snapshot, null, 2) + "\n", secret, deps);
+  } catch (e) {
+    firstUploadThrew = true;
+    firstUpload = { thrown: e };
+  }
+  if (!firstUploadThrew && firstUpload.ok) return { created: true, period, assetName };
+  if (!firstUploadThrew && !isTransientPostStatus(firstUpload.status, firstUpload.headers)) {
+    throw new Error("POST de asset falló definitivo: HTTP " + firstUpload.status);
+  }
+
+  let rebúsqueda;
+  try {
+    rebúsqueda = await findAssetResilient(assetName, repo, secret, deps, perPage);
+  } catch (e) {
+    throw new Error("Fallo ambiguo sin tercer POST tras subida");
+  }
+  if (rebúsqueda.found) return { created: true, period, assetName, existingRelease: { id: rebúsqueda.release.id, tag: rebúsqueda.release.tag_name } };
+  if (rebúsqueda.found === false) {
+    // Need to check if search was conclusive: findAssetResilient would have thrown if uncertain, so reaching here means conclusive absence
+    let secondUpload;
+    let secondUploadThrew = false;
+    try {
+      secondUpload = await singleUploadAssetResilient(release, assetName, JSON.stringify(snapshot, null, 2) + "\n", secret, deps);
+    } catch (e) {
+      secondUploadThrew = true;
+      secondUpload = { thrown: e };
+    }
+    if (!secondUploadThrew && secondUpload.ok) return { created: true, period, assetName };
+    if (!secondUploadThrew && !isTransientPostStatus(secondUpload.status, secondUpload.headers) && secondUpload.status !== 0) {
+      throw new Error("Segundo POST de asset falló: HTTP " + secondUpload.status);
+    }
+    let finalSearch;
+    try {
+      finalSearch = await findAssetResilient(assetName, repo, secret, deps, perPage);
+    } catch (e) {
+      throw new Error("Fallo ambiguo persistente sin tercer POST");
+    }
+    if (finalSearch.found) return { created: true, period, assetName, existingRelease: { id: finalSearch.release.id, tag: finalSearch.release.tag_name } };
+    throw new Error("Fallo ambiguo persistente sin tercer POST tras subida");
+  }
+  throw new Error("Fallo ambiguo sin ausencia concluyente tras subida");
 }
 
 async function main() {

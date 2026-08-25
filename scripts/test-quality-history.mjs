@@ -327,7 +327,7 @@ function createPersistDeps({ releasePages, assetsByReleaseId, existingMonthlyRel
       if (existingMonthlyRelease && existingMonthlyRelease.tag_name === decodeURIComponent(tagMatch[1])) {
         return { ok: true, status: 200, data: existingMonthlyRelease };
       }
-      return { ok: false, status: 404, data: null };
+      return { ok: false, status: 404, data: { message: "Not Found" } };
     }
     if (path.endsWith("/releases") && options.method === "POST") {
       calls.creates += 1;
