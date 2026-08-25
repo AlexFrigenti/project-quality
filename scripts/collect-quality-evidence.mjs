@@ -3,6 +3,7 @@ import { pathToFileURL } from "node:url";
 import { resolve } from "node:path";
 import { validateQualityMetrics } from "./validate-quality-metrics.mjs";
 import { findZipEntry } from "./zip-entry-reader.mjs";
+import { resilientFetch, withRetry } from "./github-api-request.mjs";
 
 const ENTRY_NAME = "quality-metrics.json";
 
@@ -21,28 +22,36 @@ function apiUrl(path) {
 
 async function request(path) {
   try {
-    const response = await fetch(apiUrl(path), { headers });
-    let data = null;
-    try {
-      data = await response.json();
-    } catch {
-      data = null;
+    const response = await resilientFetch(apiUrl(path), { headers });
+    let data = response.data;
+    if (data === undefined) {
+      try {
+        data = await response.json();
+      } catch {
+        data = null;
+      }
     }
     return { ok: response.ok, status: response.status, data };
   } catch (error) {
     return {
       ok: false,
       status: 0,
-      data: { message: error instanceof Error ? error.message : String(error) }
+      data: { message: String(error instanceof Error ? error.message : error).slice(0, 200) }
     };
   }
 }
 
 export async function readArtifactJson(artifact, repository, deps = {}) {
   const fetchImpl = deps.fetch || fetch;
+  const resilientDeps = {
+    fetch: fetchImpl,
+    sleep: deps.sleep,
+    now: deps.now,
+    config: deps.config
+  };
   const archiveUrl = artifact.archive_download_url
     || apiUrl("/repos/" + repository + "/actions/artifacts/" + artifact.id + "/zip");
-  const response = await fetchImpl(archiveUrl, { headers });
+  const response = await resilientFetch(archiveUrl, { headers }, resilientDeps);
   if (!response.ok) throw new Error("No se pudo descargar el artifact.");
 
   const bytes = Buffer.from(await response.arrayBuffer());
@@ -287,8 +296,33 @@ export async function collectQualityEvidence({
   exposeLinks = false,
   deps = {}
 } = {}) {
-  const fetchImpl = deps.fetch || ((path) => request(path));
-  const readArtifact = deps.readArtifact || ((artifact, targetRepository) => readArtifactJson(artifact, targetRepository));
+  const resilientDeps = {
+    fetch: deps.fetch || globalThis.fetch,
+    sleep: deps.sleep,
+    now: deps.now,
+    config: deps.config
+  };
+  const fetchImpl = async (path) => {
+    const operation = async () => {
+      if (deps.fetch) {
+        const result = await deps.fetch(path);
+        if (!result.headers) result.headers = { get: () => null, has: () => false };
+        return result;
+      }
+      const response = await resilientFetch(apiUrl(path), { headers }, resilientDeps);
+      let data = response.data;
+      if (data === undefined) {
+        try {
+          data = await response.json();
+        } catch {
+          data = null;
+        }
+      }
+      return { ok: response.ok, status: response.status, headers: response.headers, data };
+    };
+    return withRetry(operation, resilientDeps);
+  };
+  const readArtifact = deps.readArtifact || ((artifact, targetRepository) => readArtifactJson(artifact, targetRepository, deps));
 
   if (!currentCommitSha) {
     return unavailableQualityEvidence("No se pudo resolver el HEAD actual de la rama estable.", currentCommitSha);
