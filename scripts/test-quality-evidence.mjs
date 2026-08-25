@@ -403,13 +403,14 @@ function buildTestZip(entries) {
     const raw = Buffer.isBuffer(entry.data) ? entry.data : Buffer.from(entry.data, "utf8");
     const compressed = method === 8 ? zlib.deflateRawSync(raw) : raw;
     const declaredSize = entry.declaredUncompressed ?? raw.length;
+    const crc = entry.crcOverride ?? crc32ForTest(raw);
 
     const local = Buffer.alloc(30);
     local.writeUInt32LE(0x04034b50, 0);
     local.writeUInt16LE(20, 4);
     local.writeUInt16LE(flags, 6);
     local.writeUInt16LE(method, 8);
-    local.writeUInt32LE(crc32Placeholder(), 14);
+    local.writeUInt32LE(crc, 14);
     local.writeUInt32LE(compressed.length, 18);
     local.writeUInt32LE(declaredSize, 22);
     local.writeUInt16LE(nameBuf.length, 26);
@@ -420,7 +421,7 @@ function buildTestZip(entries) {
     central.writeUInt16LE(20, 6);
     central.writeUInt16LE(flags, 8);
     central.writeUInt16LE(method, 10);
-    central.writeUInt32LE(crc32Placeholder(), 16);
+    central.writeUInt32LE(crc, 16);
     central.writeUInt32LE(compressed.length, 20);
     central.writeUInt32LE(declaredSize, 24);
     central.writeUInt16LE(nameBuf.length, 28);
@@ -512,6 +513,86 @@ assert.throws(
   /1\.000\.000/,
   "entrada descomprimida sobre el límite debe rechazarse"
 );
+
+function crc32ForTest(buffer) {
+  if (typeof crc32ForTest.table === "undefined") {
+    const table = new Uint32Array(256);
+    for (let index = 0; index < 256; index += 1) {
+      let value = index;
+      for (let step = 0; step < 8; step += 1) value = (value & 1) ? (0xedb88320 ^ (value >>> 1)) : value >>> 1;
+      table[index] = value;
+    }
+    crc32ForTest.table = table;
+  }
+  let crc = 0xffffffff;
+  for (const byte of buffer) crc = crc32ForTest.table[(crc ^ byte) & 0xff] ^ (crc >>> 8);
+  return (crc ^ 0xffffffff) >>> 0;
+}
+
+{
+  const valid = buildTestZip([{ name: "quality-metrics.json", data: jsonPayload }]);
+  assert.doesNotThrow(() => findZipEntry(valid, () => true), "ZIP con CRC32 correcto debe aceptarse");
+  const corrupted = Buffer.from(valid);
+  const signature = Buffer.from([0x50, 0x4b, 0x03, 0x04]);
+  const localOffset = corrupted.indexOf(signature);
+  const declaredCrc = corrupted.readUInt32LE(localOffset + 14);
+  const flipped = Buffer.from(corrupted);
+  flipped.writeUInt32LE((declaredCrc ^ 0x1) >>> 0, localOffset + 14);
+  const centralPos = flipped.indexOf(Buffer.from([0x50, 0x4b, 0x01, 0x02]));
+  flipped.writeUInt32LE((declaredCrc ^ 0x1) >>> 0, centralPos + 16);
+  assert.throws(
+    () => findZipEntry(flipped, (name) => name === "quality-metrics.json"),
+    /CRC32 inválido/,
+    "La entrada con CRC32 alterado debe rechazarse"
+  );
+  await assert.rejects(
+    readArtifactJson(
+      { archive_download_url: "https://pipeline.invalid/zip" },
+      REPOSITORY,
+      { fetch: async () => ({ ok: true, status: 200, arrayBuffer: async () => flipped }) }
+    ),
+    /CRC32 inválido/,
+    "readArtifactJson debe propagar el error de CRC32"
+  );
+}
+
+{
+  const valid = buildTestZip([{ name: "quality-metrics.json", data: jsonPayload }]);
+  const zip64 = Buffer.from(valid);
+  const eocd = findEocdPosition(zip64);
+  zip64.writeUInt32LE(0xffffffff, eocd + 12);
+  assert.throws(
+    () => findZipEntry(zip64, () => true),
+    /ZIP64 no están soportados/,
+    "ZIP64 con tamaño de directorio central máximo debe rechazarse"
+  );
+}
+
+{
+  const valid = buildTestZip([{ name: "quality-metrics.json", data: jsonPayload }]);
+  const zip64 = Buffer.from(valid);
+  const eocd = findEocdPosition(zip64);
+  zip64.writeUInt16LE(0xFFFF, eocd + 8);
+  assert.throws(
+    () => findZipEntry(zip64, () => true),
+    /ZIP64 no están soportados/,
+    "ZIP64 con contador de entradas máximo debe rechazarse"
+  );
+  const entryZip64 = buildTestZip([{ name: "quality-metrics.json", data: jsonPayload }]);
+  entryZip64.writeUInt32LE(0xffffffff, entryZip64.indexOf(Buffer.from([0x50, 0x4b, 0x01, 0x02])) + 42);
+  assert.throws(
+    () => findZipEntry(entryZip64, () => true),
+    /ZIP64 no están soportados/,
+    "entrada con offset ZIP64 debe rechazarse"
+  );
+}
+
+function findEocdPosition(buffer) {
+  for (let position = buffer.length - 22; position >= 0; position -= 1) {
+    if (buffer.readUInt32LE(position) === 0x06054b50) return position;
+  }
+  throw new Error("fixture sin EOCD");
+}
 
 {
   const valid = buildTestZip([{ name: "quality-metrics.json", data: jsonPayload }]);

@@ -6,6 +6,23 @@ const EOCD_SIGNATURE = 0x06054b50;
 const MAX_UNCOMPRESSED_BYTES = 1000000;
 const METHOD_STORE = 0;
 const METHOD_DEFLATE = 8;
+const ZIP64_SENTINEL_16 = 0xffff;
+const ZIP64_SENTINEL_32 = 0xffffffff;
+
+function crc32(buffer) {
+  if (typeof crc32.table === "undefined") {
+    const table = new Uint32Array(256);
+    for (let index = 0; index < 256; index += 1) {
+      let value = index;
+      for (let step = 0; step < 8; step += 1) value = (value & 1) ? (0xedb88320 ^ (value >>> 1)) : value >>> 1;
+      table[index] = value;
+    }
+    crc32.table = table;
+  }
+  let value = 0xffffffff;
+  for (const byte of buffer) value = crc32.table[(value ^ byte) & 0xff] ^ (value >>> 8);
+  return (value ^ 0xffffffff) >>> 0;
+}
 
 function fail(message) {
   throw new Error(message);
@@ -20,9 +37,18 @@ function findEocdOffset(buffer) {
 }
 
 function readCentralDirectory(buffer, eocdOffset) {
-  const totalEntries = buffer.readUInt16LE(eocdOffset + 10);
+  const totalEntries = buffer.readUInt16LE(eocdOffset + 8);
+  const totalEntriesCentral = buffer.readUInt16LE(eocdOffset + 10);
   const directorySize = buffer.readUInt32LE(eocdOffset + 12);
   const directoryOffset = buffer.readUInt32LE(eocdOffset + 16);
+  if (
+    totalEntries === ZIP64_SENTINEL_16
+    || totalEntriesCentral === ZIP64_SENTINEL_16
+    || directorySize === ZIP64_SENTINEL_32
+    || directoryOffset === ZIP64_SENTINEL_32
+  ) {
+    fail("Los artifacts ZIP64 no están soportados.");
+  }
   if (directoryOffset + directorySize > buffer.length) {
     fail("El artifact ZIP está malformado: el directorio central está fuera de los límites del archivo.");
   }
@@ -34,17 +60,26 @@ function readCentralDirectory(buffer, eocdOffset) {
     }
     const flags = buffer.readUInt16LE(cursor + 8);
     const method = buffer.readUInt16LE(cursor + 10);
+    const crc32Value = buffer.readUInt32LE(cursor + 16);
     const compressedSize = buffer.readUInt32LE(cursor + 20);
     const uncompressedSize = buffer.readUInt32LE(cursor + 24);
     const nameLength = buffer.readUInt16LE(cursor + 28);
     const extraLength = buffer.readUInt16LE(cursor + 30);
     const commentLength = buffer.readUInt16LE(cursor + 32);
     const localHeaderOffset = buffer.readUInt32LE(cursor + 42);
+    if (
+      compressedSize === ZIP64_SENTINEL_32
+      || uncompressedSize === ZIP64_SENTINEL_32
+      || localHeaderOffset === ZIP64_SENTINEL_32
+    ) {
+      fail("Los artifacts ZIP64 no están soportados.");
+    }
     const name = buffer.toString("utf8", cursor + 46, cursor + 46 + nameLength);
     entries.push({
       name,
       flags,
       method,
+      crc32Value,
       compressedSize,
       uncompressedSize,
       localHeaderOffset
@@ -80,6 +115,9 @@ function decompressEntry(buffer, entry) {
 
   const compressed = buffer.subarray(dataStart, dataStart + entry.compressedSize);
   const data = entry.method === METHOD_DEFLATE ? inflateRawSync(compressed) : Buffer.from(compressed);
+  if (crc32(data) !== entry.crc32Value) {
+    fail("La entrada ZIP tiene un CRC32 inválido.");
+  }
   if (Number.isInteger(entry.uncompressedSize) && entry.uncompressedSize < 0xffffffff && data.length !== entry.uncompressedSize) {
     fail(`El artifact ZIP está malformado: tamaño descomprimido incoherente en "${entry.name}".`);
   }
