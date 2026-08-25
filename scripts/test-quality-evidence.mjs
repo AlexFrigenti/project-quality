@@ -334,7 +334,7 @@ for (const [label, broken] of [
     artifactsOkByRun: { 131: false }
   });
   assert.equal(result.status, "unavailable");
-  assert.match(result.message, /no se pudieron consultar los artifacts/);
+  assert.match(result.message, /paginaci[oó]n/i);
 }
 
 {
@@ -368,7 +368,262 @@ for (const [label, broken] of [
 {
   const result = await collectWith({ runs: [], runsOk: false });
   assert.equal(result.status, "unavailable");
-  assert.equal(result.message, "No se pudo consultar el historial de Actions.");
+  assert.match(result.message, /paginaci[oó]n|No se pudo consultar el historial de Actions/i);
+}
+
+// -------------------------------------------------------------
+// Paginación completa de workflow runs y artifacts (PQ-OX12)
+// -------------------------------------------------------------
+function createPaginatedFetch({
+  runsPages,
+  artifactsPagesByRun,
+  runsErrorPage,
+  artifactsErrorOnPage,
+  invalidRunsPage,
+  invalidArtifactsPage
+} = {}) {
+  const counters = { runs: 0, artifacts: 0 };
+  const fetch = async (path) => {
+    if (path.includes("/actions/workflows/") && path.includes("/runs?")) {
+      counters.runs += 1;
+      const pageMatch = path.match(/[?&]page=(\d+)/);
+      const page = pageMatch ? Number.parseInt(pageMatch[1], 10) : 1;
+      if (runsErrorPage === page) return { ok: false, status: 500, data: {} };
+      if (invalidRunsPage === page) return { ok: true, status: 200, data: { workflow_runs: "invalid" } };
+      if (runsPages) {
+        const pageData = runsPages[page - 1];
+        if (pageData === undefined) return { ok: true, status: 200, data: { workflow_runs: [] } };
+        if (Array.isArray(pageData)) return { ok: true, status: 200, data: { workflow_runs: pageData } };
+        return { ok: true, status: 200, data: pageData };
+      }
+      return { ok: true, status: 200, data: { workflow_runs: [] } };
+    }
+    const match = path.match(/\/actions\/runs\/(\d+)\/artifacts/);
+    if (match) {
+      counters.artifacts += 1;
+      const runId = Number(match[1]);
+      const pageMatch = path.match(/[?&]page=(\d+)/);
+      const page = pageMatch ? Number.parseInt(pageMatch[1], 10) : 1;
+      const key = `${runId}:${page}`;
+      if (artifactsErrorOnPage && artifactsErrorOnPage[key]) return { ok: false, status: 500, data: {} };
+      if (invalidArtifactsPage && invalidArtifactsPage[key]) return { ok: true, status: 200, data: { artifacts: "invalid" } };
+      const pages = artifactsPagesByRun?.[runId];
+      if (pages) {
+        const pageData = pages[page - 1];
+        if (pageData === undefined) return { ok: true, status: 200, data: { artifacts: [] } };
+        if (Array.isArray(pageData)) return { ok: true, status: 200, data: { artifacts: pageData } };
+        return { ok: true, status: 200, data: pageData };
+      }
+      return { ok: true, status: 200, data: { artifacts: [] } };
+    }
+    return { ok: false, status: 404, data: {} };
+  };
+  return { fetch, counters };
+}
+
+function collectPaginated({
+  runsPages,
+  artifactsPagesByRun,
+  readByArtifactId,
+  runsErrorPage,
+  artifactsErrorOnPage,
+  invalidRunsPage,
+  invalidArtifactsPage,
+  callCounters
+} = {}) {
+  const paginated = createPaginatedFetch({
+    runsPages,
+    artifactsPagesByRun,
+    runsErrorPage,
+    artifactsErrorOnPage,
+    invalidRunsPage,
+    invalidArtifactsPage
+  });
+  if (callCounters) {
+    const originalFetch = paginated.fetch;
+    const wrappedFetch = async (path) => {
+      const result = await originalFetch(path);
+      if (path.includes("/actions/workflows/")) callCounters.runs = paginated.counters.runs;
+      else if (path.includes("/artifacts")) callCounters.artifacts = paginated.counters.artifacts;
+      return result;
+    };
+    return {
+      promise: collectQualityEvidence({
+        repository: REPOSITORY,
+        defaultBranch: "main",
+        currentCommitSha: CURRENT_SHA,
+        workflowFile: "quality.yml",
+        exposeLinks: false,
+        deps: {
+          fetch: wrappedFetch,
+          readArtifact: stubReadArtifact(readByArtifactId)
+        }
+      }),
+      counters: paginated.counters
+    };
+  }
+  return {
+    promise: collectQualityEvidence({
+      repository: REPOSITORY,
+      defaultBranch: "main",
+      currentCommitSha: CURRENT_SHA,
+      workflowFile: "quality.yml",
+      exposeLinks: false,
+      deps: {
+        fetch: paginated.fetch,
+        readArtifact: stubReadArtifact(readByArtifactId)
+      }
+    }),
+    counters: paginated.counters
+  };
+}
+
+function makeOtherRuns(count, startId = 1000) {
+  return Array.from({ length: count }, (_, index) => runFor({
+    id: startId + index,
+    sha: "ffffffffffffffffffffffffffffffffffffffff",
+    createdAt: "2026-08-12T10:00:00.000Z"
+  }));
+}
+
+{
+  const validRun = runFor({ id: 500, createdAt: "2026-08-13T11:00:00.000Z" });
+  const otherRuns = makeOtherRuns(100, 1000);
+  const { promise } = collectPaginated({
+    runsPages: [otherRuns, [validRun]],
+    artifactsPagesByRun: { 500: [[artifactFor(900)]] },
+    readByArtifactId: { 900: reportFor({ id: 500, attempt: 1, conclusion: "passed" }) }
+  });
+  const result = await promise;
+  assert.equal(result.status, "current", "Workflow run válido solo en la página 2 debe ser current");
+  assert.equal(result.summary.run.id, 500);
+}
+
+{
+  const older = runFor({ id: 501, createdAt: "2026-08-13T10:00:00.000Z" });
+  const newer = runFor({ id: 502, createdAt: "2026-08-13T12:00:00.000Z" });
+  const otherRuns = makeOtherRuns(99, 2000);
+  const { promise } = collectPaginated({
+    runsPages: [[...otherRuns, older], [newer]],
+    artifactsPagesByRun: {
+      501: [[artifactFor(901)]],
+      502: [[artifactFor(902)]]
+    },
+    readByArtifactId: {
+      901: reportFor({ id: 501, conclusion: "passed" }),
+      902: reportFor({ id: 502, conclusion: "passed" })
+    }
+  });
+  const result = await promise;
+  assert.equal(result.status, "current", "Runs válidos repartidos en varias páginas debe elegir el más reciente por created_at");
+  assert.equal(result.summary.run.id, 502);
+  assert.equal(result.artifact.id, 902);
+}
+
+{
+  const validRun = runFor({ id: 510 });
+  const otherArtifacts = Array.from({ length: 100 }, (_, index) => ({
+    id: 2000 + index,
+    name: "other-artifact",
+    expired: false,
+    created_at: "2026-08-13T10:05:00.000Z",
+    expires_at: "2026-09-12T10:05:00.000Z"
+  }));
+  const { promise } = collectPaginated({
+    runsPages: [[validRun]],
+    artifactsPagesByRun: { 510: [otherArtifacts, [artifactFor(910)]] },
+    readByArtifactId: { 910: reportFor({ id: 510, conclusion: "passed" }) }
+  });
+  const result = await promise;
+  assert.equal(result.status, "current", "Artifact válido solo en la página 2 debe ser current");
+  assert.equal(result.artifact.id, 910);
+}
+
+{
+  const { promise } = collectPaginated({
+    runsPages: [],
+    invalidRunsPage: 1
+  });
+  const result = await promise;
+  assert.equal(result.status, "unavailable", "Página de workflow runs con estructura inválida debe producir unavailable");
+  assert.match(result.message, /paginaci[oó]n/i, "El error debe identificar que la paginación quedó incompleta");
+  assert.equal(result.status !== "pending", true);
+}
+
+{
+  const validRun = runFor({ id: 520 });
+  const { promise } = collectPaginated({
+    runsPages: [[validRun]],
+    invalidArtifactsPage: { "520:1": true }
+  });
+  const result = await promise;
+  assert.equal(result.status, "unavailable", "Página de artifacts con estructura inválida debe producir unavailable");
+  assert.match(result.message, /paginaci[oó]n/i);
+}
+
+{
+  const validRun = runFor({ id: 530 });
+  const { promise: promise2 } = collectPaginated({
+    runsPages: [[validRun]],
+    artifactsPagesByRun: {
+      530: [
+        Array.from({ length: 100 }, (_, i) => ({ id: 3000 + i, name: "other", expired: false, created_at: "2026-08-13T10:05:00.000Z", expires_at: "2026-09-12T10:05:00.000Z" })),
+        []
+      ]
+    },
+    artifactsErrorOnPage: { "530:2": true }
+  });
+  const result = await promise2;
+  assert.equal(result.status, "unavailable", "Error al consultar una página posterior debe producir unavailable");
+  assert.match(result.message, /paginaci[oó]n/i);
+}
+
+{
+  const fullPages = Array.from({ length: 100 }, (_, pageIndex) => makeOtherRuns(100, 10000 + pageIndex * 100));
+  const paginated = createPaginatedFetch({ runsPages: fullPages });
+  let runsCalls = 0;
+  const countingFetch = async (path) => {
+    if (path.includes("/actions/workflows/") && path.includes("/runs?")) runsCalls += 1;
+    return paginated.fetch(path);
+  };
+  const result = await collectQualityEvidence({
+    repository: REPOSITORY,
+    defaultBranch: "main",
+    currentCommitSha: CURRENT_SHA,
+    workflowFile: "quality.yml",
+    exposeLinks: false,
+    deps: {
+      fetch: countingFetch,
+      readArtifact: stubReadArtifact({})
+    }
+  });
+  assert.equal(result.status, "unavailable", "Límite de 100 páginas sin final incompleta debe producir unavailable");
+  assert.match(result.message, /límite|paginaci[oó]n/i);
+  assert.ok(runsCalls <= 100, "No debe generar más de 100 llamadas, generadas: " + runsCalls);
+  assert.equal(runsCalls, 100, "Debe haber intentado exactamente 100 páginas");
+}
+
+{
+  const otherRuns = makeOtherRuns(50, 6000);
+  const { promise } = collectPaginated({
+    runsPages: [otherRuns, []],
+    artifactsPagesByRun: {}
+  });
+  const result = await promise;
+  assert.equal(result.status, "pending", "Ausencia real de run debe seguir devolviendo pending cuando toda la paginación termina correctamente");
+  assert.equal(result.message, "Evidencia pendiente para el commit actual");
+}
+
+{
+  const validRun = runFor({ id: 540 });
+  const { promise } = collectPaginated({
+    runsPages: [[validRun]],
+    artifactsPagesByRun: { 540: [[], []] },
+    readByArtifactId: {}
+  });
+  const result = await promise;
+  assert.equal(result.status, "unavailable", "Ausencia de artifact debe conservar el comportamiento unavailable");
+  assert.match(result.message, /no tiene un artifact quality-metrics disponible/);
 }
 
 await assert.rejects(
