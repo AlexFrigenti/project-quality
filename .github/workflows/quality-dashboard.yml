@@ -38,6 +38,9 @@ on:
       - "scripts/test-schema-validator-parity.mjs"
       - "scripts/test-node-quality-workflow.mjs"
       - "scripts/test-node-quality-workflow-crlf.mjs"
+      - "scripts/github-api-request.mjs"
+      - "scripts/zip-entry-reader.mjs"
+      - "scripts/test-dashboard-trigger-paths.mjs"
       - ".github/workflows/node-quality.yml"
       - ".github/workflows/static-quality.yml"
   push:
@@ -78,6 +81,9 @@ on:
       - "scripts/test-schema-validator-parity.mjs"
       - "scripts/test-node-quality-workflow.mjs"
       - "scripts/test-node-quality-workflow-crlf.mjs"
+      - "scripts/github-api-request.mjs"
+      - "scripts/zip-entry-reader.mjs"
+      - "scripts/test-dashboard-trigger-paths.mjs"
       - ".github/workflows/node-quality.yml"
       - ".github/workflows/static-quality.yml"
   schedule:
@@ -180,6 +186,9 @@ jobs:
 
       - name: Validate history index tooling
         run: node scripts/test-quality-history-index.mjs
+
+      - name: Validate dashboard trigger paths
+        run: node scripts/test-dashboard-trigger-paths.mjs
 
       - name: Download audit reports
         uses: actions/download-artifact@v8
