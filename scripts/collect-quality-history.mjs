@@ -7,7 +7,7 @@ import { validateQualityHistoryIndex } from "./validate-quality-history-index.mj
 import { createQuarantineEntry, createQuarantineManifest } from "./history-quarantine.mjs";
 import { listHistoryReleases, listReleaseAssets } from "./history-pagination.mjs";
 import { CONTRACT_REGEXP, canonicalJson } from "./quality-contract.mjs";
-import { withRetry } from "./github-api-request.mjs";
+import { resilientFetch, withRetry } from "./github-api-request.mjs";
 
 const API_ROOT = "https://api.github.com";
 
@@ -25,24 +25,24 @@ function authHeaders(token, accept = "application/vnd.github+json") {
   };
 }
 
-async function defaultFetchJson(path, token) {
-  const response = await fetch(API_ROOT + path, { headers: authHeaders(token) });
+async function resilientJsonFetch(path, token, deps) {
+  const res = await resilientFetch(API_ROOT + path, { headers: authHeaders(token) }, deps);
   let data = null;
   try {
-    data = await response.json();
+    data = await res.json();
   } catch {
     data = null;
   }
-  return { ok: response.ok, status: response.status, data };
+  return { ok: res.ok, status: res.status, data, headers: res.headers, errorType: res.errorType };
 }
 
-async function defaultFetchAssetBody(path, token) {
-  const response = await fetch(API_ROOT + path, { headers: authHeaders(token, "application/octet-stream") });
-  if (!response.ok) return { ok: false, status: response.status };
+async function resilientAssetFetch(path, token, deps) {
+  const res = await resilientFetch(API_ROOT + path, { headers: authHeaders(token, "application/octet-stream") }, deps);
+  if (!res.ok) return { ok: false, status: res.status, headers: res.headers, errorType: res.errorType };
   try {
-    return { ok: true, status: response.status, text: await response.text() };
+    return { ok: true, status: res.status, headers: res.headers, text: await res.text() };
   } catch {
-    return { ok: false, status: 0 };
+    return { ok: false, status: 0, headers: { get: () => null, has: () => false } };
   }
 }
 
@@ -138,10 +138,33 @@ async function evaluateSnapshotAsset({ repository, release, asset, expectedId, f
 export async function collectQualityHistory({ repository, token, currentSnapshot, deps = {}, now = new Date() } = {}) {
   const repo = requireText(repository, "GITHUB_REPOSITORY");
   const secret = requireText(token, "GITHUB_TOKEN");
-  const baseFetchJson = deps.fetchJson || ((path) => defaultFetchJson(path, secret));
-  const baseFetchAssetBody = deps.fetchAssetBody || ((path) => defaultFetchAssetBody(path, secret));
-  const fetchJson = (path) => withRetry(() => baseFetchJson(path), deps);
-  const fetchAssetBody = (path) => withRetry(() => baseFetchAssetBody(path), deps);
+  const baseFetchJson = deps.fetchJson || null;
+  const baseFetchAssetBody = deps.fetchAssetBody || null;
+  const fetchJson = (path) => {
+    if (baseFetchJson) return withRetry(() => baseFetchJson(path), deps);
+    return withRetry(async () => {
+      const res = await resilientFetch(API_ROOT + path, { headers: authHeaders(secret) }, deps);
+      let data = null;
+      try {
+        data = await res.json();
+      } catch {
+        data = null;
+      }
+      return { ok: res.ok, status: res.status, data, headers: res.headers, errorType: res.errorType };
+    }, deps);
+  };
+  const fetchAssetBody = (path) => {
+    if (baseFetchAssetBody) return withRetry(() => baseFetchAssetBody(path), deps);
+    return withRetry(async () => {
+      const res = await resilientFetch(API_ROOT + path, { headers: authHeaders(secret, "application/octet-stream") }, deps);
+      if (!res.ok) return { ok: false, status: res.status, headers: res.headers, errorType: res.errorType };
+      try {
+        return { ok: true, status: res.status, headers: res.headers, text: await res.text() };
+      } catch {
+        return { ok: false, status: 0, headers: { get: () => null, has: () => false } };
+      }
+    }, deps);
+  };
   const perPage = deps.perPage;
 
   const entries = [];

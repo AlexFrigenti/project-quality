@@ -331,26 +331,41 @@ function authHeaders(token, accept = "application/vnd.github+json") {
   };
 }
 
-async function githubRequest(path, { token, method = "GET", body, accept } = {}) {
-  const response = await fetch(apiUrl(path), {
+async function githubRequest(path, { token, method = "GET", body, accept, deps = {} } = {}) {
+  const url = apiUrl(path);
+  const headers = {
+    ...authHeaders(token, accept),
+    ...(body ? { "Content-Type": "application/json" } : {})
+  };
+  const fetchOptions = {
     method,
-    headers: {
-      ...authHeaders(token, accept),
-      ...(body ? { "Content-Type": "application/json" } : {})
-    },
+    headers,
     body: body ? JSON.stringify(body) : undefined
-  });
+  };
+  const useSingleAttempt = method === "POST";
+  const response = useSingleAttempt
+    ? await singleAttemptFetch(url, fetchOptions, deps)
+    : await resilientFetch(url, fetchOptions, deps);
   let data = null;
-  try { data = await response.json(); } catch {}
-  return { ok: response.ok, status: response.status, data };
+  try {
+    data = await response.json();
+  } catch {}
+  return { ok: response.ok, status: response.status, data, headers: response.headers, errorType: response.errorType };
 }
 
 async function getOrCreateRelease({ repository, period, token, targetCommit, deps = {} }) {
   const tag = "quality-history-" + period;
-  const request = deps.request || githubRequest;
 
   async function resilientGetTag() {
-    const operation = async () => request(`/repos/${repository}/releases/tags/${tag}`, { token });
+    const operation = async () => {
+      if (deps.request) return deps.request(`/repos/${repository}/releases/tags/${tag}`, { token });
+      const res = await resilientFetch(apiUrl(`/repos/${repository}/releases/tags/${tag}`), { headers: authHeaders(token) }, deps);
+      let data = null;
+      try {
+        data = await res.json();
+      } catch {}
+      return { ok: res.ok, status: res.status, data, headers: res.headers, errorType: res.errorType };
+    };
     return withRetry(operation, deps);
   }
 
@@ -431,10 +446,10 @@ async function getOrCreateRelease({ repository, period, token, targetCommit, dep
   throw new Error("Fallo ambiguo persistente sin tercer POST");
 }
 
-async function uploadAsset(release, name, content, token) {
+async function uploadAsset(release, name, content, token, deps = {}) {
   const uploadUrl = String(release.upload_url || "").replace(/\{\?.*$/, "");
   if (!uploadUrl) throw new Error("El release histórico no tiene URL de subida.");
-  const response = await fetch(uploadUrl + "?name=" + encodeURIComponent(name), {
+  const response = await singleAttemptFetch(uploadUrl + "?name=" + encodeURIComponent(name), {
     method: "POST",
     headers: {
       ...authHeaders(token),
@@ -442,7 +457,7 @@ async function uploadAsset(release, name, content, token) {
       "Content-Length": String(Buffer.byteLength(content))
     },
     body: content
-  });
+  }, deps);
   if (!response.ok) throw new Error("No se pudo publicar el asset histórico.");
 }
 
