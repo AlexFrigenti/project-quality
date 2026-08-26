@@ -42,6 +42,7 @@ on:
       - "scripts/zip-entry-reader.mjs"
       - "scripts/test-dashboard-trigger-paths.mjs"
       - "scripts/test-history-api-resilience.mjs"
+      - "scripts/test-history-production-path.mjs"
       - ".github/workflows/node-quality.yml"
       - ".github/workflows/static-quality.yml"
   push:
@@ -86,6 +87,7 @@ on:
       - "scripts/zip-entry-reader.mjs"
       - "scripts/test-dashboard-trigger-paths.mjs"
       - "scripts/test-history-api-resilience.mjs"
+      - "scripts/test-history-production-path.mjs"
       - ".github/workflows/node-quality.yml"
       - ".github/workflows/static-quality.yml"
   schedule:
@@ -194,6 +196,9 @@ jobs:
 
       - name: Validate history API resilience
         run: node scripts/test-history-api-resilience.mjs
+
+      - name: Validate history production path
+        run: node scripts/test-history-production-path.mjs
 
       - name: Download audit reports
         uses: actions/download-artifact@v8
