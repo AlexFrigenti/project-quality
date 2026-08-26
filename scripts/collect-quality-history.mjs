@@ -7,6 +7,7 @@ import { validateQualityHistoryIndex } from "./validate-quality-history-index.mj
 import { createQuarantineEntry, createQuarantineManifest } from "./history-quarantine.mjs";
 import { listHistoryReleases, listReleaseAssets } from "./history-pagination.mjs";
 import { CONTRACT_REGEXP, canonicalJson } from "./quality-contract.mjs";
+import { withRetry } from "./github-api-request.mjs";
 
 const API_ROOT = "https://api.github.com";
 
@@ -137,18 +138,36 @@ async function evaluateSnapshotAsset({ repository, release, asset, expectedId, f
 export async function collectQualityHistory({ repository, token, currentSnapshot, deps = {}, now = new Date() } = {}) {
   const repo = requireText(repository, "GITHUB_REPOSITORY");
   const secret = requireText(token, "GITHUB_TOKEN");
-  const fetchJson = deps.fetchJson || ((path) => defaultFetchJson(path, secret));
-  const fetchAssetBody = deps.fetchAssetBody || ((path) => defaultFetchAssetBody(path, secret));
+  const baseFetchJson = deps.fetchJson || ((path) => defaultFetchJson(path, secret));
+  const baseFetchAssetBody = deps.fetchAssetBody || ((path) => defaultFetchAssetBody(path, secret));
+  const fetchJson = (path) => withRetry(() => baseFetchJson(path), deps);
+  const fetchAssetBody = (path) => withRetry(() => baseFetchAssetBody(path), deps);
   const perPage = deps.perPage;
 
   const entries = [];
   const snapshots = currentSnapshot ? [currentSnapshot] : [];
 
-  for (const release of await listHistoryReleases(repo, fetchJson, { perPage })) {
+  let releases;
+  try {
+    releases = await listHistoryReleases(repo, fetchJson, { perPage });
+  } catch (e) {
+    const msg = String(e.message || e);
+    if (msg.includes("límite de paginación") || msg.includes("tag inválido") || msg.includes("no es válida")) throw e;
+    return { ok: false, error: msg.slice(0, 200) };
+  }
+  for (const release of releases) {
     if (!Number.isInteger(release.id) || release.id < 1) {
       throw new Error("Release histórico sin identificador válido: " + (release.tag_name || "?"));
     }
-    for (const asset of await listReleaseAssets(repo, release, fetchJson, { perPage })) {
+    let assets;
+    try {
+      assets = await listReleaseAssets(repo, release, fetchJson, { perPage });
+    } catch (e) {
+      const msg = String(e.message || e);
+      if (msg.includes("límite de paginación") || msg.includes("no es válida")) throw e;
+      return { ok: false, error: msg.slice(0, 200) };
+    }
+    for (const asset of assets) {
       const name = typeof asset?.name === "string" ? asset.name : "";
       if (!name.startsWith("quality-snapshot-")) continue;
       const match = name.match(CONTRACT_REGEXP.historyAssetName);

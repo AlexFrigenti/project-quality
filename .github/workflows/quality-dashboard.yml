@@ -41,6 +41,7 @@ on:
       - "scripts/github-api-request.mjs"
       - "scripts/zip-entry-reader.mjs"
       - "scripts/test-dashboard-trigger-paths.mjs"
+      - "scripts/test-history-api-resilience.mjs"
       - ".github/workflows/node-quality.yml"
       - ".github/workflows/static-quality.yml"
   push:
@@ -84,6 +85,7 @@ on:
       - "scripts/github-api-request.mjs"
       - "scripts/zip-entry-reader.mjs"
       - "scripts/test-dashboard-trigger-paths.mjs"
+      - "scripts/test-history-api-resilience.mjs"
       - ".github/workflows/node-quality.yml"
       - ".github/workflows/static-quality.yml"
   schedule:
@@ -189,6 +191,9 @@ jobs:
 
       - name: Validate dashboard trigger paths
         run: node scripts/test-dashboard-trigger-paths.mjs
+
+      - name: Validate history API resilience
+        run: node scripts/test-history-api-resilience.mjs
 
       - name: Download audit reports
         uses: actions/download-artifact@v8

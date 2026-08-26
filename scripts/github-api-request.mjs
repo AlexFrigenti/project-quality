@@ -145,6 +145,13 @@ export async function withRetry(operation, deps = {}) {
   return { ok: false, status: 0, headers: { get: () => null, has: () => false }, data: { message: lastError ? String(lastError.message || lastError) : "Error de red" }, errorType };
 }
 
+export async function singleAttemptFetch(url, options = {}, deps = {}) {
+  // Operación de una sola tentativa con timeout, sin reintentos.
+  // Documentado como excepción a la resiliencia por no idempotencia de POST.
+  // Reutiliza resilientFetch con maxAttempts=1 para mantener timeout, sanitización y diagnóstico.
+  return resilientFetch(url, options, { ...deps, maxAttempts: 1 });
+}
+
 export async function resilientFetch(url, options = {}, deps = {}) {
   const fetchImpl = deps.fetch || globalThis.fetch;
   const sleepImpl = deps.sleep || ((ms) => new Promise((resolve) => setTimeout(resolve, ms)));
