@@ -45,6 +45,7 @@ on:
       - "scripts/test-history-production-path.mjs"
       - "scripts/fixture-history-legacy.mjs"
       - "scripts/test-github-api-resilience.mjs"
+      - "scripts/test-static-quality-workflow.mjs"
       - ".github/workflows/node-quality.yml"
       - ".github/workflows/static-quality.yml"
   push:
@@ -92,6 +93,7 @@ on:
       - "scripts/test-history-production-path.mjs"
       - "scripts/fixture-history-legacy.mjs"
       - "scripts/test-github-api-resilience.mjs"
+      - "scripts/test-static-quality-workflow.mjs"
       - ".github/workflows/node-quality.yml"
       - ".github/workflows/static-quality.yml"
   schedule:
@@ -170,6 +172,9 @@ jobs:
 
       - name: Validate Node workflow diagnostics contract on CRLF
         run: node scripts/test-node-quality-workflow-crlf.mjs
+
+      - name: Validate static quality workflow contract
+        run: node scripts/test-static-quality-workflow.mjs
 
       - name: Validate audit profiles
         run: node scripts/test-audit-profiles.mjs
