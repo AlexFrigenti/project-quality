@@ -1,0 +1,26 @@
+{
+  "editor.formatOnSave": false,
+
+  "files.exclude": {
+    "**/node_modules": true,
+    "**/coverage": true
+  },
+
+  "search.exclude": {
+    "**/node_modules": true,
+    "**/coverage": true
+  },
+
+  "files.watcherExclude": {
+    "**/node_modules/**": true,
+    "**/coverage/**": true
+  },
+
+  "git.autofetch": true,
+  "git.confirmSync": false,
+
+  "gitlens.currentLine.enabled": false,
+  "gitlens.codeLens.enabled": false,
+
+  "testing.automaticallyOpenPeekView": "never"
+}
