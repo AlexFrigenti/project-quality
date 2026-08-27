@@ -329,4 +329,137 @@ function createSleepRecorder() {
   assert.ok(postCalls <= 2, "Nunca tercer POST");
 }
 
+// 15. collectQualityHistory con 503x3 en ruta productiva (únicamente deps.fetch) -> exactamente 3 llamadas, nunca 9
+{
+  let fetchCalls = 0;
+  const fetch = async () => {
+    fetchCalls++;
+    return mockResponse({ status: 503, headers: {}, body: {} });
+  };
+  const result = await collectQualityHistory({
+    repository: "o/r",
+    token: "t",
+    deps: { fetch, sleep: async () => {}, now: () => Date.now() },
+    now: new Date()
+  });
+  assert.equal(result.ok, false);
+  assert.equal(fetchCalls, 3, `collectQualityHistory con 503x3 debe realizar exactamente 3 llamadas, pero realizó ${fetchCalls}`);
+}
+
+// 16. persistSnapshot con 503x3 en ruta productiva (únicamente deps.fetch) -> exactamente 3 llamadas, nunca 9
+{
+  const snap = validSnapshot();
+  let tagCalls = 0;
+  const fetch = async (url) => {
+    if (url.includes("/releases?per_page=")) {
+      return mockResponse({ status: 200, body: [] });
+    }
+    if (url.includes("/releases/tags/")) {
+      tagCalls++;
+      return mockResponse({ status: 503, headers: {}, body: {} });
+    }
+    return mockResponse({ status: 200, body: [] });
+  };
+  let threw = false;
+  try {
+    await persistSnapshot(snap, {
+      repository: "o/r",
+      token: "t",
+      deps: { fetch, sleep: async () => {}, now: () => Date.now() }
+    });
+  } catch {
+    threw = true;
+  }
+  assert.ok(threw, "persistSnapshot debe fallar si getOrCreateRelease no puede consultar el tag tras 3 intentos");
+  assert.equal(tagCalls, 3, `persistSnapshot con 503x3 debe realizar exactamente 3 llamadas para el tag, pero realizó ${tagCalls}`);
+}
+
+// 17. GET productivo con 503x2 seguido de 200 en persistSnapshot (únicamente deps.fetch) -> exactamente 3 llamadas
+{
+  const snap = validSnapshot();
+  let tagCalls = 0;
+  const fetch = async (url) => {
+    if (url.includes("/releases?per_page=")) {
+      return mockResponse({ status: 200, body: [] });
+    }
+    if (url.includes("/releases/tags/")) {
+      tagCalls++;
+      if (tagCalls < 3) {
+        return mockResponse({ status: 503, headers: {}, body: {} });
+      }
+      return mockResponse({
+        status: 200,
+        body: { id: 1, tag_name: "quality-history-2026-08", upload_url: "https://api.github.com/upload{?name}" }
+      });
+    }
+    return mockResponse({ status: 200, body: [] });
+  };
+  const result = await persistSnapshot(snap, {
+    repository: "o/r",
+    token: "t",
+    deps: { fetch, sleep: async () => {}, now: () => Date.now(), upload: async () => ({ ok: true, status: 201 }) }
+  });
+  assert.ok(result, "persistSnapshot debe completarse con éxito");
+  assert.equal(tagCalls, 3, `persistSnapshot debe realizar exactamente 3 llamadas, pero realizó ${tagCalls}`);
+}
+
+// 18. Errores definitivos 401 y 422 en ruta productiva (únicamente deps.fetch) -> exactamente 1 llamada, sin retry
+{
+  // 401 en collectQualityHistory
+  let calls401 = 0;
+  const fetch401 = async () => {
+    calls401++;
+    return mockResponse({ status: 401, headers: {}, body: { message: "Bad credentials" } });
+  };
+  const result401 = await collectQualityHistory({
+    repository: "o/r",
+    token: "t",
+    deps: { fetch: fetch401, sleep: async () => {}, now: () => Date.now() },
+    now: new Date()
+  });
+  assert.equal(calls401, 1, `401 en collect debe hacer exactamente 1 llamada, pero hizo ${calls401}`);
+  assert.equal(result401.ok, false);
+
+  // 422 en persistSnapshot
+  const snap = validSnapshot();
+  let calls422 = 0;
+  const fetch422 = async (url) => {
+    if (url.includes("/releases?per_page=")) {
+      return mockResponse({ status: 200, body: [] });
+    }
+    if (url.includes("/releases/tags/")) {
+      calls422++;
+      return mockResponse({ status: 422, headers: {}, body: { message: "Validation Failed" } });
+    }
+    return mockResponse({ status: 200, body: [] });
+  };
+  let threw422 = false;
+  try {
+    await persistSnapshot(snap, {
+      repository: "o/r",
+      token: "t",
+      deps: { fetch: fetch422, sleep: async () => {}, now: () => Date.now() }
+    });
+  } catch {
+    threw422 = true;
+  }
+  assert.ok(threw422);
+  assert.equal(calls422, 1, `422 en persist debe hacer exactamente 1 llamada, pero hizo ${calls422}`);
+}
+
+// 19. Verificación estática de que no existe withRetry(resilientFetch en código productivo
+{
+  const files = ["scripts/collect-quality-history.mjs", "scripts/persist-quality-history.mjs"];
+  for (const file of files) {
+    const content = await readFile(file, "utf8");
+    assert.ok(
+      !content.includes("withRetry(resilientFetch") &&
+      !content.includes("withRetry(() => resilientFetch") &&
+      !content.includes("withRetry(async () => resilientFetch") &&
+      !/withRetry\s*\(\s*(async\s*)?\(\s*\)\s*=>\s*\{?\s*(return\s+)?(await\s+)?resilientFetch/.test(content),
+      `Se detectó composición withRetry(resilientFetch(...)) en ${file}`
+    );
+  }
+}
+
 console.log("History production path válido.");

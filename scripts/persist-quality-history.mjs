@@ -30,14 +30,11 @@ function isTransientPostStatus(status, headers) {
 }
 
 async function resilientGetTag(tag, repo, token, deps) {
-  const operation = async () => {
-    if (deps.request) return deps.request(`/repos/${repo}/releases/tags/${tag}`, { token });
-    const res = await resilientFetch(apiUrl(`/repos/${repo}/releases/tags/${tag}`), { headers: authHeaders(token) }, deps);
-    let data = null;
-    try { data = await res.json(); } catch {}
-    return { ok: res.ok, status: res.status, data, headers: res.headers, errorType: res.errorType };
-  };
-  return withRetry(operation, deps);
+  if (deps.request) return withRetry(() => deps.request(`/repos/${repo}/releases/tags/${tag}`, { token }), deps);
+  const res = await resilientFetch(apiUrl(`/repos/${repo}/releases/tags/${tag}`), { headers: authHeaders(token) }, deps);
+  let data = null;
+  try { data = await res.json(); } catch {}
+  return { ok: res.ok, status: res.status, data, headers: res.headers, errorType: res.errorType };
 }
 
 async function singlePostRelease(repo, tag, period, token, targetCommit, deps) {
@@ -59,14 +56,11 @@ async function singlePostRelease(repo, tag, period, token, targetCommit, deps) {
 
 async function findAssetResilient(assetName, repo, token, deps, perPage) {
   const fetchJson = async (path) => {
-    const operation = async () => {
-      if (deps.request) return deps.request(path, { token });
-      const res = await resilientFetch(apiUrl(path), { headers: authHeaders(token) }, deps);
-      let data = null;
-      try { data = await res.json(); } catch {}
-      return { ok: res.ok, status: res.status, data, headers: res.headers, errorType: res.errorType };
-    };
-    return withRetry(operation, deps);
+    if (deps.request) return withRetry(() => deps.request(path, { token }), deps);
+    const res = await resilientFetch(apiUrl(path), { headers: authHeaders(token) }, deps);
+    let data = null;
+    try { data = await res.json(); } catch {}
+    return { ok: res.ok, status: res.status, data, headers: res.headers, errorType: res.errorType };
   };
   const releases = await listHistoryReleases(repo, fetchJson, { perPage });
   for (const release of releases) {
@@ -357,16 +351,13 @@ async function getOrCreateRelease({ repository, period, token, targetCommit, dep
   const tag = "quality-history-" + period;
 
   async function resilientGetTag() {
-    const operation = async () => {
-      if (deps.request) return deps.request(`/repos/${repository}/releases/tags/${tag}`, { token });
-      const res = await resilientFetch(apiUrl(`/repos/${repository}/releases/tags/${tag}`), { headers: authHeaders(token) }, deps);
-      let data = null;
-      try {
-        data = await res.json();
-      } catch {}
-      return { ok: res.ok, status: res.status, data, headers: res.headers, errorType: res.errorType };
-    };
-    return withRetry(operation, deps);
+    if (deps.request) return withRetry(() => deps.request(`/repos/${repository}/releases/tags/${tag}`, { token }), deps);
+    const res = await resilientFetch(apiUrl(`/repos/${repository}/releases/tags/${tag}`), { headers: authHeaders(token) }, deps);
+    let data = null;
+    try {
+      data = await res.json();
+    } catch {}
+    return { ok: res.ok, status: res.status, data, headers: res.headers, errorType: res.errorType };
   }
 
   async function singlePostRelease() {
