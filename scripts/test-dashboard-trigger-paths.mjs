@@ -58,10 +58,14 @@ const allTestFiles = (await readdir("scripts"))
 
 // test-main-quality-gate.mjs pertenece al gate universal y no al flujo de Pages
 const dashboardDomainSuites = allTestFiles.filter((file) => file !== "test-main-quality-gate.mjs");
+assert.ok(
+  allTestFiles.includes("test-static-quality-workflow.mjs"),
+  "Debe existir la suite scripts/test-static-quality-workflow.mjs para validar static-quality.yml"
+);
 assert.equal(
   dashboardDomainSuites.length,
-  17,
-  `El dominio del dashboard debe constar exactamente de 17 suites, pero se encontraron ${dashboardDomainSuites.length}`
+  18,
+  `El dominio del dashboard debe constar exactamente de 18 suites, pero se encontraron ${dashboardDomainSuites.length}`
 );
 
 // 2. Extraer y validar suites ejecutadas por el job assemble
