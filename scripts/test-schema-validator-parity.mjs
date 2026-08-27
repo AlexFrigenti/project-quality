@@ -8,8 +8,10 @@ import {
   EVIDENCE_KINDS,
   METRICS_GATE_STATUSES,
   PROCESS_STATUSES,
-  QUALITY_STATUSES
+  QUALITY_STATUSES,
+  QUARANTINE_DETAIL_LIMIT
 } from "./quality-contract.mjs";
+import { QUARANTINE_REASONS } from "./history-quarantine.mjs";
 
 async function schema(file) {
   return JSON.parse(await readFile(file, "utf8"));
@@ -60,7 +62,7 @@ const dashboardWorkflow = await readFile(".github/workflows/quality-dashboard.ym
 assert.match(nodeWorkflow, /sparse-checkout:[\s\S]*scripts\/quality-contract\.mjs/);
 assert.match(staticWorkflow, /sparse-checkout:[\s\S]*scripts\/quality-contract\.mjs/);
 
-for (const root of [metrics, history, historyIndex]) {
+for (const root of [metrics, history, historyIndex, quarantine]) {
   assert.equal(root.additionalProperties, false, `${root.title}: el objeto raíz debe estar cerrado`);
 }
 
@@ -103,5 +105,11 @@ assertGateRelations(history.$defs.gate, "quality-history gate");
 
 assert.equal(historyIndex.properties.generatedAt.pattern, CONTRACT_PATTERNS.rfc3339DateTime);
 assert.equal(historyIndex.properties.snapshots.items.$ref, "quality-history.schema.json");
+
+assert.equal(quarantine.$defs.entry.additionalProperties, false, "quarantine entry debe estar cerrada");
+assertEnum(quarantine.$defs.entry.properties.reason.enum, QUARANTINE_REASONS, "quarantine reason");
+assert.equal(quarantine.$defs.entry.properties.detail.maxLength, QUARANTINE_DETAIL_LIMIT);
+assert.equal(quarantine.$defs.entry.properties.releaseTag.pattern, CONTRACT_PATTERNS.historyReleaseTag);
+assert.equal(quarantine.properties.generatedAt.pattern, CONTRACT_PATTERNS.rfc3339DateTime);
 
 console.log("Schema-validator parity válido.");
