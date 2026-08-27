@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { execFile } from "node:child_process";
-import { readdir } from "node:fs/promises";
+import { readFile, readdir } from "node:fs/promises";
 import zlib from "node:zlib";
 import {
   buildQualitySummary,
@@ -898,5 +898,28 @@ assert.throws(() => sanitizeQualityMetrics({
     url: "https://github.com/example?token=github_pat_fake"
   }]
 }), /token/i);
+
+{
+  const collectorContent = await readFile("scripts/collect-quality-evidence.mjs", "utf8");
+
+  assert.ok(
+    !/(?:async\s+)?function\s+request\b/.test(collectorContent),
+    "scripts/collect-quality-evidence.mjs no debe declarar la función huérfana request"
+  );
+
+  assert.ok(
+    /const\s+fetchImpl\s*=\s*deps\.fetch\s*\|\|\s*globalThis\.fetch\s*;/.test(collectorContent),
+    "scripts/collect-quality-evidence.mjs debe usar deps.fetch || globalThis.fetch en readArtifactJson"
+  );
+
+  assert.ok(
+    /withRetry\s*\(/.test(collectorContent),
+    "scripts/collect-quality-evidence.mjs debe mantener withRetry en la ruta activa"
+  );
+  assert.ok(
+    /resilientFetch\s*\(/.test(collectorContent),
+    "scripts/collect-quality-evidence.mjs debe mantener resilientFetch en la ruta activa"
+  );
+}
 
 console.log("Collector de evidencia válido.");
