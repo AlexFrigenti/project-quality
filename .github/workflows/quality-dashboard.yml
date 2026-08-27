@@ -43,6 +43,8 @@ on:
       - "scripts/test-dashboard-trigger-paths.mjs"
       - "scripts/test-history-api-resilience.mjs"
       - "scripts/test-history-production-path.mjs"
+      - "scripts/fixture-history-legacy.mjs"
+      - "scripts/test-github-api-resilience.mjs"
       - ".github/workflows/node-quality.yml"
       - ".github/workflows/static-quality.yml"
   push:
@@ -88,6 +90,8 @@ on:
       - "scripts/test-dashboard-trigger-paths.mjs"
       - "scripts/test-history-api-resilience.mjs"
       - "scripts/test-history-production-path.mjs"
+      - "scripts/fixture-history-legacy.mjs"
+      - "scripts/test-github-api-resilience.mjs"
       - ".github/workflows/node-quality.yml"
       - ".github/workflows/static-quality.yml"
   schedule:
@@ -199,6 +203,15 @@ jobs:
 
       - name: Validate history production path
         run: node scripts/test-history-production-path.mjs
+
+      - name: Validate actions runtime contract
+        run: node scripts/test-actions-runtime.mjs
+
+      - name: Validate history quarantine contract
+        run: node scripts/test-history-quarantine.mjs
+
+      - name: Validate GitHub API resilience
+        run: node scripts/test-github-api-resilience.mjs
 
       - name: Download audit reports
         uses: actions/download-artifact@v8
