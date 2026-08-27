@@ -462,4 +462,23 @@ function createSleepRecorder() {
   }
 }
 
+// 20. Verificación estática de ausencia de helpers muertos en persistencia y preservación de helpers activos en colección
+{
+  const collectContent = await readFile("scripts/collect-quality-history.mjs", "utf8");
+  assert.ok(/async\s+function\s+resilientJsonFetch\b/.test(collectContent), "scripts/collect-quality-history.mjs debe mantener la declaración de resilientJsonFetch");
+  assert.ok(/async\s+function\s+resilientAssetFetch\b/.test(collectContent), "scripts/collect-quality-history.mjs debe mantener la declaración de resilientAssetFetch");
+  assert.ok(collectContent.includes("resilientJsonFetch(path, secret, deps)"), "collectQualityHistory debe usar activamente resilientJsonFetch");
+  assert.ok(collectContent.includes("resilientAssetFetch(path, secret, deps)"), "collectQualityHistory debe usar activamente resilientAssetFetch");
+
+  const persistContent = await readFile("scripts/persist-quality-history.mjs", "utf8");
+  assert.ok(!/function\s+githubRequest\b/.test(persistContent), "scripts/persist-quality-history.mjs no debe declarar githubRequest");
+  assert.ok(!/function\s+uploadAsset\b/.test(persistContent), "scripts/persist-quality-history.mjs no debe declarar uploadAsset");
+  assert.ok(!/async\s+function\s+resilientGetTag\s*\(\s*tag\s*,/.test(persistContent), "scripts/persist-quality-history.mjs no debe declarar resilientGetTag a nivel de módulo");
+  assert.ok(!/async\s+function\s+singlePostRelease\s*\(\s*repo\s*,/.test(persistContent), "scripts/persist-quality-history.mjs no debe declarar singlePostRelease a nivel de módulo");
+
+  // Verificar que las funciones internas homónimas siguen declaradas
+  assert.ok(/async\s+function\s+resilientGetTag\s*\(\s*\)/.test(persistContent), "scripts/persist-quality-history.mjs debe mantener la función interna resilientGetTag");
+  assert.ok(/async\s+function\s+singlePostRelease\s*\(\s*\)/.test(persistContent), "scripts/persist-quality-history.mjs debe mantener la función interna singlePostRelease");
+}
+
 console.log("History production path válido.");

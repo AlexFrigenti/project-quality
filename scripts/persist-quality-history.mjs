@@ -29,31 +29,6 @@ function isTransientPostStatus(status, headers) {
   return false;
 }
 
-async function resilientGetTag(tag, repo, token, deps) {
-  if (deps.request) return withRetry(() => deps.request(`/repos/${repo}/releases/tags/${tag}`, { token }), deps);
-  const res = await resilientFetch(apiUrl(`/repos/${repo}/releases/tags/${tag}`), { headers: authHeaders(token) }, deps);
-  let data = null;
-  try { data = await res.json(); } catch {}
-  return { ok: res.ok, status: res.status, data, headers: res.headers, errorType: res.errorType };
-}
-
-async function singlePostRelease(repo, tag, period, token, targetCommit, deps) {
-  const body = {
-    tag_name: tag,
-    target_commitish: targetCommit,
-    name: "Quality history " + period,
-    body: "Snapshots sanitizados de calidad validados durante " + period + ".",
-    draft: false,
-    prerelease: false,
-    generate_release_notes: false
-  };
-  if (deps.request) return deps.request(`/repos/${repo}/releases`, { token, method: "POST", body });
-  const res = await singleAttemptFetch(apiUrl(`/repos/${repo}/releases`), { method: "POST", headers: { ...authHeaders(token), "Content-Type": "application/json" }, body: JSON.stringify(body) }, deps);
-  let data = null;
-  try { data = await res.json(); } catch {}
-  return { ok: res.ok, status: res.status, data, headers: res.headers };
-}
-
 async function findAssetResilient(assetName, repo, token, deps, perPage) {
   const fetchJson = async (path) => {
     if (deps.request) return withRetry(() => deps.request(path, { token }), deps);
@@ -325,28 +300,6 @@ function authHeaders(token, accept = "application/vnd.github+json") {
   };
 }
 
-async function githubRequest(path, { token, method = "GET", body, accept, deps = {} } = {}) {
-  const url = apiUrl(path);
-  const headers = {
-    ...authHeaders(token, accept),
-    ...(body ? { "Content-Type": "application/json" } : {})
-  };
-  const fetchOptions = {
-    method,
-    headers,
-    body: body ? JSON.stringify(body) : undefined
-  };
-  const useSingleAttempt = method === "POST";
-  const response = useSingleAttempt
-    ? await singleAttemptFetch(url, fetchOptions, deps)
-    : await resilientFetch(url, fetchOptions, deps);
-  let data = null;
-  try {
-    data = await response.json();
-  } catch {}
-  return { ok: response.ok, status: response.status, data, headers: response.headers, errorType: response.errorType };
-}
-
 async function getOrCreateRelease({ repository, period, token, targetCommit, deps = {} }) {
   const tag = "quality-history-" + period;
 
@@ -435,21 +388,6 @@ async function getOrCreateRelease({ repository, period, token, targetCommit, dep
   }
   if (finalCheck.ok) return finalCheck.data;
   throw new Error("Fallo ambiguo persistente sin tercer POST");
-}
-
-async function uploadAsset(release, name, content, token, deps = {}) {
-  const uploadUrl = String(release.upload_url || "").replace(/\{\?.*$/, "");
-  if (!uploadUrl) throw new Error("El release histórico no tiene URL de subida.");
-  const response = await singleAttemptFetch(uploadUrl + "?name=" + encodeURIComponent(name), {
-    method: "POST",
-    headers: {
-      ...authHeaders(token),
-      "Content-Type": "application/octet-stream",
-      "Content-Length": String(Buffer.byteLength(content))
-    },
-    body: content
-  }, deps);
-  if (!response.ok) throw new Error("No se pudo publicar el asset histórico.");
 }
 
 async function singleUploadAssetResilient(release, name, content, token, deps) {

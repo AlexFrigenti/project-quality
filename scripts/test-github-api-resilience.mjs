@@ -1,4 +1,7 @@
 import assert from "node:assert/strict";
+import { mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { collectQualityEvidence } from "./collect-quality-evidence.mjs";
 import { auditRepository } from "./audit-repository.mjs";
 import { resilientFetch } from "./github-api-request.mjs";
@@ -191,13 +194,18 @@ function fixedNow(value) {
     fetchCalls++;
     return mockResponse({ status: 403, headers: { "x-ratelimit-remaining": "0", "x-ratelimit-reset": String(Math.floor(Date.now()/1000)+1) }, body: {} });
   };
-  const report = await auditRepository({
-    env: { AUDIT_REPOSITORY: "AlexFrigenti/Nucleo", AUDIT_PROFILE: "nucleo", AUDIT_VISIBILITY: "public", QUALITY_STANDARD_SHA: "a".repeat(40), OUTPUT_FILE: `report-${Date.now()}.json` },
-    deps: { fetch, sleep: sleepRec.sleep, now: fixedNow(Date.now()) }
-  });
-  // debe producir error/unavailable y no verde
-  assert.ok(report.overall !== "pass");
-  assert.ok(report.repository.access !== "available" || report.checks.some(c => c.status !== "pass") || report.qualityEvidence.status !== "current");
+  const tempDir = await mkdtemp(join(tmpdir(), "test-github-resilience-"));
+  try {
+    const report = await auditRepository({
+      env: { AUDIT_REPOSITORY: "AlexFrigenti/Nucleo", AUDIT_PROFILE: "nucleo", AUDIT_VISIBILITY: "public", QUALITY_STANDARD_SHA: "a".repeat(40), OUTPUT_FILE: join(tempDir, "quality-report.json") },
+      deps: { fetch, sleep: sleepRec.sleep, now: fixedNow(Date.now()) }
+    });
+    // debe producir error/unavailable y no verde
+    assert.ok(report.overall !== "pass");
+    assert.ok(report.repository.access !== "available" || report.checks.some(c => c.status !== "pass") || report.qualityEvidence.status !== "current");
+  } finally {
+    await rm(tempDir, { recursive: true, force: true });
+  }
 }
 
 // 11. Integración collect-quality-evidence con error transitorio agotado -> unavailable, nunca pending
