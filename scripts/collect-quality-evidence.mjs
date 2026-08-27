@@ -20,29 +20,8 @@ function apiUrl(path) {
   return path.startsWith("http") ? path : API_ROOT + path;
 }
 
-async function request(path) {
-  try {
-    const response = await resilientFetch(apiUrl(path), { headers });
-    let data = response.data;
-    if (data === undefined) {
-      try {
-        data = await response.json();
-      } catch {
-        data = null;
-      }
-    }
-    return { ok: response.ok, status: response.status, data };
-  } catch (error) {
-    return {
-      ok: false,
-      status: 0,
-      data: { message: String(error instanceof Error ? error.message : error).slice(0, 200) }
-    };
-  }
-}
-
 export async function readArtifactJson(artifact, repository, deps = {}) {
-  const fetchImpl = deps.fetch || fetch;
+  const fetchImpl = deps.fetch || globalThis.fetch;
   const resilientDeps = {
     fetch: fetchImpl,
     sleep: deps.sleep,
