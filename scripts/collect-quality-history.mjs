@@ -142,28 +142,11 @@ export async function collectQualityHistory({ repository, token, currentSnapshot
   const baseFetchAssetBody = deps.fetchAssetBody || null;
   const fetchJson = (path) => {
     if (baseFetchJson) return withRetry(() => baseFetchJson(path), deps);
-    return withRetry(async () => {
-      const res = await resilientFetch(API_ROOT + path, { headers: authHeaders(secret) }, deps);
-      let data = null;
-      try {
-        data = await res.json();
-      } catch {
-        data = null;
-      }
-      return { ok: res.ok, status: res.status, data, headers: res.headers, errorType: res.errorType };
-    }, deps);
+    return resilientJsonFetch(path, secret, deps);
   };
   const fetchAssetBody = (path) => {
     if (baseFetchAssetBody) return withRetry(() => baseFetchAssetBody(path), deps);
-    return withRetry(async () => {
-      const res = await resilientFetch(API_ROOT + path, { headers: authHeaders(secret, "application/octet-stream") }, deps);
-      if (!res.ok) return { ok: false, status: res.status, headers: res.headers, errorType: res.errorType };
-      try {
-        return { ok: true, status: res.status, headers: res.headers, text: await res.text() };
-      } catch {
-        return { ok: false, status: 0, headers: { get: () => null, has: () => false } };
-      }
-    }, deps);
+    return resilientAssetFetch(path, secret, deps);
   };
   const perPage = deps.perPage;
 
